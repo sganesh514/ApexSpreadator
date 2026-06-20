@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ApexSpreadator — Price Action & Vertical Spread Trading Dashboard">
+    <title>ApexSpreadator Trading Console</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦅</text></svg>">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header" id="header">
+        <div class="header-left">
+            <div class="logo">🦅 APEX SPREADATOR</div>
+            <span class="mode-badge paper" id="modeBadge">📄 Paper Trading</span>
+            <div class="connection-status">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="connectionText">Connecting...</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-primary" id="btnPause" onclick="togglePause()">
+                ⏸ Pause Agent
+            </button>
+            <span class="time-display" id="timeDisplay" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);"></span>
+        </div>
+    </header>
+
+    <!-- Circuit Breaker Banner -->
+    <div class="circuit-breaker-banner" id="circuitBreakerBanner">
+        🚨 CIRCUIT BREAKER ACTIVE — <span id="circuitBreakerReason"></span>
+        <button class="btn btn-danger" onclick="resetCircuitBreaker()" style="margin-left: 12px;">Reset</button>
+    </div>
+
+    <!-- Dashboard Grid -->
+    <main class="dashboard">
+        <!-- Account Balance Card -->
+        <div class="card account-card">
+            <div class="card-header">
+                <span class="card-title">Account Balance</span>
+                <span class="card-badge" id="accountMode">Paper</span>
+            </div>
+            <div class="balance-display" id="balance">$25,000.00</div>
+            <div class="balance-change positive" id="dailyPnl">+$0.00 today</div>
+            <div class="account-metrics">
+                <div class="metric">
+                    <div class="metric-label">Equity</div>
+                    <div class="metric-value" id="equity">$25,000.00</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Buying Power</div>
+                    <div class="metric-value" id="buyingPower">$25,000.00</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Total P&L</div>
+                    <div class="metric-value" id="totalPnl">$0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Market Structure & Zones Card -->
+        <div class="card market-structure-card">
+            <div class="card-header">
+                <span class="card-title">Market Structure & Zones</span>
+                <span class="card-badge" id="marketBiasBadge">NEUTRAL</span>
+            </div>
+            <div class="market-structure-info">
+                <div class="bias-container">
+                    <span class="bias-label">Current Bias:</span>
+                    <span class="bias-value" id="currentBias">NEUTRAL</span>
+                </div>
+                <div class="proximity-container">
+                    <span class="proximity-label">Zone Proximity:</span>
+                    <span class="proximity-value" id="zoneProximity">No active zones</span>
+                </div>
+                <div class="active-zones-list-container">
+                    <div class="mini-title">Active Supply/Demand Zones</div>
+                    <div class="zones-table-container">
+                        <table class="mini-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Type</th>
+                                    <th>Range (Low - High)</th>
+                                    <th>Origin</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activeZonesBody">
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: var(--text-muted);">No active zones mapped</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Open Positions Card -->
+        <div class="card positions-card">
+            <div class="card-header">
+                <span class="card-title">Open Positions</span>
+                <span class="card-badge" id="positionCount">0 / 4</span>
+            </div>
+            <div class="position-list" id="positionList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📭</div>
+                    No open positions. Agent is monitoring structure and active zones...
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Filter Log Card -->
+        <div class="card risk-log-card">
+            <div class="card-header">
+                <span class="card-title">Risk Filter Log (2.5:1 R:R Filter)</span>
+                <span class="card-badge">Telemetry</span>
+            </div>
+            <div class="risk-log-container" style="max-height: 250px; overflow-y: auto;">
+                <table class="mini-table">
+                    <thead>
+                        <tr>
+                            <th>Time/Exp</th>
+                            <th>Symbol</th>
+                            <th>Spread</th>
+                            <th>Debit</th>
+                            <th>R:R</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="riskLogBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-muted);">No risk check logs yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Performance Stats -->
+        <div class="card stats-card">
+            <div class="card-header">
+                <span class="card-title">Performance</span>
+                <span class="card-badge" id="totalTrades">0 trades</span>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="winRate" style="color: var(--accent-cyan);">--</div>
+                    <div class="stat-label">Win Rate</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="avgWin" style="color: var(--profit);">--</div>
+                    <div class="stat-label">Avg Win</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="avgLoss" style="color: var(--loss);">--</div>
+                    <div class="stat-label">Avg Loss</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="profitFactor">--</div>
+                    <div class="stat-label">Profit Factor</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trade History -->
+        <div class="card history-card">
+            <div class="card-header">
+                <span class="card-title">Trade History</span>
+                <span class="card-badge" id="historyCount">0 trades</span>
+            </div>
+            <div style="max-height: 300px; overflow-y: auto;">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Symbol</th>
+                            <th>Vertical Spread</th>
+                            <th>Entry</th>
+                            <th>Exit</th>
+                            <th>P&L</th>
+                            <th>%</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody">
+                        <tr>
+                            <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                No completed trades yet
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Agent Insights -->
+        <div class="card insights-card">
+            <div class="card-header">
+                <span class="card-title">Agent Journal / Insights</span>
+                <span class="card-badge">System Logs</span>
+            </div>
+            <div class="insight-list" id="insightList">
+                <div class="insight-item">
+                    <span class="insight-time">Now</span>
+                    <span class="insight-content">ApexSpreadator Price Action Bot initialized. Monitoring swing highs/lows for BOS to identify market bias.</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Close Position Modal -->
+    <div class="modal-overlay" id="closeModal">
+        <div class="modal">
+            <div class="modal-title">Close Position</div>
+            <div class="modal-body" id="closeModalBody">
+                Are you sure you want to close this vertical spread position?
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="cancelClose()">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmClose()">Close Position</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

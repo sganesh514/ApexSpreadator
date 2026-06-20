@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ApexSpreadator Backtest Performance Report</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0e14;
+            --bg-secondary: #131722;
+            --bg-card: #1c2030;
+            --border: #2a2e3f;
+            
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            
+            --accent-indigo: #6366f1;
+            --accent-purple: #8b5cf6;
+            --accent-emerald: #10b981;
+            --accent-rose: #f43f5e;
+            --accent-cyan: #06b6d4;
+            --accent-amber: #f59e0b;
+            --accent-blue: #3b82f6;
+
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            line-height: 1.5;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: linear-gradient(135deg, #1e1b4b 0%, #1e293b 100%);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-title h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 4px;
+            background: linear-gradient(to right, #a5b4fc, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header-title p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .logo-badge {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-purple));
+            padding: 10px 18px;
+            border-radius: 99px;
+            font-size: 16px;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ── Tabs ── */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+        }
+        .tab-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-secondary);
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255,255,255,0.03);
+        }
+        .tab-btn.active {
+            color: var(--text-primary);
+            background: var(--bg-card);
+            border-color: var(--border);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        /* ── Grid/Layout ── */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .kpi-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--accent-indigo);
+        }
+        .kpi-card.positive::after { background: var(--accent-emerald); }
+        .kpi-card.negative::after { background: var(--accent-rose); }
+        .kpi-card.warning::after { background: var(--accent-amber); }
+
+        .kpi-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .kpi-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .kpi-sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Section Cards */
+        .section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .section-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 12px;
+        }
+        .section-title .icon { font-size: 20px; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+        @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        /* Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .data-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+        .data-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-family: 'Inter', sans-serif;
+        }
+        .data-table tr:hover td {
+            background: rgba(255,255,255,0.02);
+        }
+        .mono { font-family: 'JetBrains Mono', monospace !important; }
+
+        /* Market Bias Styles */
+        .bias-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .bias-badge.bullish { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .bias-badge.bearish { background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3); }
+        .bias-badge.neutral { background: rgba(148, 163, 184, 0.15); color: var(--text-secondary); border: 1px solid rgba(148, 163, 184, 0.3); }
+
+        /* Zone Styles */
+        .zone-pill {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+        .zone-pill.demand { background: rgba(16,185,129,0.15); color: var(--accent-emerald); }
+        .zone-pill.supply { background: rgba(244,63,94,0.15); color: var(--accent-rose); }
+
+        /* Proximity Tracker */
+        .proximity-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .proximity-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border-radius: var(--radius-sm);
+            background: rgba(255,255,255,0.01);
+            border: 1px solid rgba(255,255,255,0.03);
+        }
+        .proximity-bar-outer {
+            width: 150px;
+            height: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .proximity-bar-inner {
+            height: 100%;
+            border-radius: 5px;
+            background: var(--accent-indigo);
+            transition: width 0.3s ease;
+        }
+
+        /* Charts */
+        .chart-container {
+            position: relative;
+            width: 100%;
+        }
+
+        .status-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .status-badge.approved { background: rgba(16,185,129,0.15); color: var(--accent-emerald); }
+        .status-badge.rejected { background: rgba(244,63,94,0.15); color: var(--accent-rose); }
+
+        /* Loader Overlay */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            transition: opacity 0.4s;
+        }
+        .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+        .spinner {
+            width: 48px; height: 48px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-indigo);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .footer {
+            text-align: center;
+            padding: 32px 0;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <div style="color: var(--text-secondary); font-size: 14px;">Running Price Action & Spread Simulator...</div>
+</div>
+
+<div class="container">
+    <header class="header">
+        <div class="header-title">
+            <h1>ApexSpreadator Backtest Report</h1>
+            <p>Bidirectional Price Action Strategy with Supply/Demand Zones & Vertical Debit Spreads</p>
+        </div>
+        <div class="logo-badge">
+            <span>⚡ ApexSpreadator</span>
+        </div>
+    </header>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="overview">📊 Performance Overview</button>
+        <button class="tab-btn" data-tab="market">🧭 Market Structure</button>
+        <button class="tab-btn" data-tab="risklogs">🛡️ Risk Filter Logs</button>
+        <button class="tab-btn" data-tab="equity">📈 Equity Curve</button>
+        <button class="tab-btn" data-tab="trades">📋 Trade Log</button>
+    </div>
+
+    <!-- ═══════════════ TAB: OVERVIEW ═══════════════ -->
+    <div class="tab-content active" id="tabContent-overview">
+        <div class="kpi-grid" id="kpiGrid"></div>
+
+        <div class="grid-2">
+            <!-- Market structure summary -->
+            <div class="section">
+                <div class="section-title"><span class="icon">🧭</span> Current Market Bias</div>
+                <div id="biasSummary" style="display:flex; flex-direction:column; gap:16px;"></div>
+            </div>
+
+            <!-- Proximity tracker -->
+            <div class="section">
+                <div class="section-title"><span class="icon">🎯</span> Active Zones & Proximity</div>
+                <div id="proximityList" class="proximity-container"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title"><span class="icon">📋</span> Win/Loss & Metrics breakdown</div>
+            <div class="grid-2">
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <div style="display:flex; justify-content:space-between;"><span>Winning Trades:</span><span id="winningCount" class="mono" style="color:var(--accent-emerald);"></span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Losing Trades:</span><span id="losingCount" class="mono" style="color:var(--accent-rose);"></span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Average Win:</span><span id="avgWinAmount" class="mono"></span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Average Loss:</span><span id="avgLossAmount" class="mono"></span></div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <div style="display:flex; justify-content:space-between;"><span>Max Drawdown:</span><span id="maxDrawdownVal" class="mono" style="color:var(--accent-rose);"></span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Max Drawdown Date:</span><span id="maxDrawdownDateVal" class="mono"></span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Sharpe Ratio:</span><span id="sharpeRatioVal" class="mono"></span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Average Hold:</span><span id="avgHoldVal" class="mono"></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ TAB: MARKET STRUCTURE ═══════════════ -->
+    <div class="tab-content" id="tabContent-market">
+        <div class="section">
+            <div class="section-title"><span class="icon">🏰</span> Active Supply / Demand Zones</div>
+            <table class="data-table" id="zonesTable">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Zone ID</th>
+                        <th>Type</th>
+                        <th>Range / Coordinates</th>
+                        <th>Formed At</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="zonesTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ═══════════════ TAB: RISK FILTER LOGS ═══════════════ -->
+    <div class="tab-content" id="tabContent-risklogs">
+        <div class="section">
+            <div class="section-title"><span class="icon">🛡️</span> Strict Risk Filter Logs (2.5:1 R:R Rule)</div>
+            <p style="color:var(--text-secondary); font-size:12px; margin-bottom:16px;">
+                Logs showing all retest opportunities detected on the chart, their option debit translation, calculated R:R, and whether they passed the 2.5:1 risk filter.
+            </p>
+            <table class="data-table" id="riskLogsTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Symbol</th>
+                        <th>Signal</th>
+                        <th>Price</th>
+                        <th>Strikes (Long/Short)</th>
+                        <th>Net Debit</th>
+                        <th>Calculated R:R</th>
+                        <th>Status / Rejection Reason</th>
+                    </tr>
+                </thead>
+                <tbody id="riskLogsTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ═══════════════ TAB: EQUITY CURVE ═══════════════ -->
+    <div class="tab-content" id="tabContent-equity">
+        <div class="section">
+            <div class="section-title"><span class="icon">📈</span> Portfolio Equity Curve</div>
+            <div class="chart-container" style="height: 400px;">
+                <canvas id="equityChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ TAB: TRADE LOG ═══════════════ -->
+    <div class="tab-content" id="tabContent-trades">
+        <div class="section">
+            <div class="section-title"><span class="icon">📋</span> Simulated Trade Log</div>
+            <table class="data-table" id="tradesTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Symbol</th>
+                        <th>Type</th>
+                        <th>Strikes</th>
+                        <th>Expiration</th>
+                        <th>Qty</th>
+                        <th>Entry Price</th>
+                        <th>Exit Price</th>
+                        <th>P&L</th>
+                        <th>Return</th>
+                        <th>Entry Date</th>
+                        <th>Exit Date</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody id="tradesTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <footer class="footer">
+        ApexSpreadator Backtest Dashboard • Standard Options Pricing Model (BSM) • Data from Yahoo Finance
+    </footer>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<script>
+    let REPORT = {};
+    let TRADES = [];
+    let EQUITY_CURVE = [];
+
+    // Tabs navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            btn.classList.add('active');
+            document.getElementById(`tabContent-${btn.dataset.tab}`).classList.add('active');
+        });
+    });
+
+    async function loadData() {
+        try {
+            // Fetch reports
+            const reportRes = await fetch('../data/backtest_report.json');
+            REPORT = await reportRes.json();
+            if (REPORT.profit_factor === 'Infinity') {
+                REPORT.profit_factor = Infinity;
+            }
+
+            const tradesRes = await fetch('../data/backtest_trades.json');
+            TRADES = await tradesRes.json();
+
+            const curveRes = await fetch('../data/backtest_equity_curve.csv');
+            const curveText = await curveRes.text();
+            const lines = curveText.trim().split('\n').slice(1);
+            EQUITY_CURVE = lines.map(line => {
+                const [date, equity] = line.split(',');
+                return { date: date.trim(), equity: parseFloat(equity) };
+            });
+
+            renderDashboard();
+        } catch (e) {
+            console.error('Error loading backtest data:', e);
+            document.getElementById('loadingOverlay').innerHTML = `
+                <div style="color: var(--accent-rose); font-size: 16px; text-align:center; padding: 40px;">
+                    <div style="font-size:48px; margin-bottom:16px;">⚠️</div>
+                    <strong>Could not load ApexSpreadator backtest data.</strong><br>
+                    <span style="color:var(--text-muted); font-size:13px;">
+                        Ensure you run the backtester pipeline first to generate the report data in <code>data/</code> folder.
+                    </span>
+                </div>`;
+        }
+    }
+
+    function renderDashboard() {
+        renderKPIs();
+        renderMarketBias();
+        renderProximityTracker();
+        renderZonesTable();
+        renderRiskLogs();
+        renderTradesTable();
+        renderEquityChart();
+
+        // Hide loader
+        setTimeout(() => {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }, 300);
+    }
+
+    function renderKPIs() {
+        const r = REPORT;
+        const isProfitable = r.total_pnl >= 0;
+        const cards = [
+            { label: 'Total Return', value: `${r.total_return_pct >= 0 ? '+' : ''}${r.total_return_pct}%`, cls: isProfitable ? 'positive' : 'negative', sub: `$${r.total_pnl?.toLocaleString()}` },
+            { label: 'Ending Equity', value: `$${r.ending_equity?.toLocaleString()}`, cls: isProfitable ? 'positive' : 'negative', sub: `from $${r.starting_capital?.toLocaleString()}` },
+            { label: 'Win Rate', value: `${r.win_rate_pct}%`, cls: r.win_rate_pct >= 50 ? 'positive' : 'warning', sub: `${r.winning_trades} Wins / ${r.losing_trades} Losses` },
+            { label: 'Profit Factor', value: r.profit_factor === Infinity ? '∞' : r.profit_factor?.toFixed(2), cls: r.profit_factor >= 1.5 ? 'positive' : r.profit_factor >= 1.0 ? 'warning' : 'negative', sub: `PF metric` },
+            { label: 'Sharpe Ratio', value: r.sharpe_ratio?.toFixed(2), cls: r.sharpe_ratio >= 1.0 ? 'positive' : 'warning', sub: 'Risk-adjusted return' }
+        ];
+
+        document.getElementById('kpiGrid').innerHTML = cards.map(c => `
+            <div class="kpi-card ${c.cls}">
+                <div class="kpi-label">${c.label}</div>
+                <div class="kpi-value">${c.value}</div>
+                <div class="kpi-sub">${c.sub}</div>
+            </div>
+        `).join('');
+
+        // Details breakdown
+        document.getElementById('winningCount').textContent = r.winning_trades;
+        document.getElementById('losingCount').textContent = r.losing_trades;
+        document.getElementById('avgWinAmount').textContent = `$${r.avg_win?.toLocaleString()}`;
+        document.getElementById('avgLossAmount').textContent = `$${r.avg_loss?.toLocaleString()}`;
+        document.getElementById('maxDrawdownVal').textContent = `${r.max_drawdown_pct}%`;
+        document.getElementById('maxDrawdownDateVal').textContent = r.max_drawdown_date;
+        document.getElementById('sharpeRatioVal').textContent = r.sharpe_ratio?.toFixed(3);
+        document.getElementById('avgHoldVal').textContent = `${r.avg_holding_days} days`;
+    }
+
+    function renderMarketBias() {
+        const biases = REPORT.market_bias || {};
+        let html = '';
+        for (const [sym, bias] of Object.entries(biases)) {
+            const cssCls = bias.toLowerCase();
+            html += `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px; background:rgba(255,255,255,0.02); border-radius:var(--radius-sm);">
+                    <span style="font-weight:700;">${sym}</span>
+                    <span class="bias-badge ${cssCls}">${bias}</span>
+                </div>
+            `;
+        }
+        document.getElementById('biasSummary').innerHTML = html || '<div style="color:var(--text-muted)">No bias tracked.</div>';
+    }
+
+    function renderProximityTracker() {
+        const zones = REPORT.active_zones || {};
+        let html = '';
+        
+        for (const [sym, activeZones] of Object.entries(zones)) {
+            if (activeZones.length === 0) {
+                html += `
+                    <div class="proximity-row">
+                        <span style="font-weight:600;">${sym}</span>
+                        <span style="color:var(--text-muted); font-size:12px;">No Active Zones</span>
+                    </div>
+                `;
+                continue;
+            }
+
+            // Show closest active zone
+            const zone = activeZones[0];
+            html += `
+                <div class="proximity-row">
+                    <div>
+                        <span style="font-weight:600; margin-right:8px;">${sym}</span>
+                        <span class="zone-pill ${zone.type.toLowerCase()}">${zone.type}</span>
+                        <span style="color:var(--text-secondary); font-size:11px;" class="mono">${zone.low} - ${zone.high}</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span style="font-size:11px; color:var(--text-muted);">Retest Zone Proximity</span>
+                        <div class="proximity-bar-outer">
+                            <div class="proximity-bar-inner" style="width: 75%"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        document.getElementById('proximityList').innerHTML = html || '<div style="color:var(--text-muted)">No active zones tracked.</div>';
+    }
+
+    function renderZonesTable() {
+        const zones = REPORT.active_zones || {};
+        let html = '';
+
+        for (const [sym, activeZones] of Object.entries(zones)) {
+            activeZones.forEach(z => {
+                html += `
+                    <tr>
+                        <td style="font-weight:700;">${sym}</td>
+                        <td class="mono">${z.id}</td>
+                        <td><span class="zone-pill ${z.type.toLowerCase()}">${z.type}</span></td>
+                        <td class="mono">${z.low.toFixed(2)} - ${z.high.toFixed(2)}</td>
+                        <td class="mono">${z.origin_time}</td>
+                        <td><span style="color:var(--accent-emerald); font-weight:600;">ACTIVE</span></td>
+                    </tr>
+                `;
+            });
+        }
+        document.getElementById('zonesTableBody').innerHTML = html || '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No active Supply/Demand zones.</td></tr>';
+    }
+
+    function renderRiskLogs() {
+        const logs = REPORT.risk_filter_logs || [];
+        let html = '';
+
+        // Display in reverse order (newest/latest date first)
+        const sortedLogs = [...logs].reverse();
+
+        sortedLogs.forEach(l => {
+            const isApproved = l.status === "APPROVED";
+            const badgeCls = isApproved ? 'approved' : 'rejected';
+            
+            html += `
+                <tr>
+                    <td class="mono">${l.date}</td>
+                    <td style="font-weight:700;">${l.symbol}</td>
+                    <td><span class="zone-pill ${l.direction === 'BULLISH' ? 'demand' : 'supply'}">${l.direction} RETEST</span></td>
+                    <td class="mono">$${l.underlying_price.toFixed(2)}</td>
+                    <td class="mono">${l.long_strike} / ${l.short_strike}</td>
+                    <td class="mono">$${l.net_debit.toFixed(2)}</td>
+                    <td class="mono" style="font-weight:600; color:${l.rr_ratio >= 2.5 ? 'var(--accent-emerald)' : 'var(--accent-rose)'}">${l.rr_ratio.toFixed(2)}:1</td>
+                    <td><span class="status-badge ${badgeCls}">${l.status}</span></td>
+                </tr>
+            `;
+        });
+        document.getElementById('riskLogsTableBody').innerHTML = html || '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No signals processed.</td></tr>';
+    }
+
+    function renderTradesTable() {
+        let html = '';
+        TRADES.forEach(t => {
+            const isWin = t.pnl >= 0;
+            const pnlColor = isWin ? 'var(--accent-emerald)' : 'var(--accent-rose)';
+            const spreadType = t.right === 'C' ? 'Bull Call' : 'Bear Put';
+
+            html += `
+                <tr>
+                    <td class="mono">${t.id}</td>
+                    <td style="font-weight:700;">${t.symbol}</td>
+                    <td><span class="zone-pill ${t.right === 'C' ? 'demand' : 'supply'}">${spreadType}</span></td>
+                    <td class="mono">${t.long_strike} / ${t.short_strike}</td>
+                    <td class="mono">${t.expiration}</td>
+                    <td class="mono">${t.qty}</td>
+                    <td class="mono">$${t.entry_price.toFixed(2)}</td>
+                    <td class="mono">$${t.exit_price.toFixed(2)}</td>
+                    <td class="mono" style="color:${pnlColor}; font-weight:700;">${t.pnl >= 0 ? '+' : ''}$${t.pnl.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                    <td class="mono" style="color:${pnlColor}; font-weight:600;">${t.pnl_pct >= 0 ? '+' : ''}${(t.pnl_pct * 100).toFixed(1)}%</td>
+                    <td class="mono">${t.entry_date}</td>
+                    <td class="mono">${t.exit_date}</td>
+                    <td><span style="font-size:11px; font-weight:500;">${t.reason.replace('_', ' ').toUpperCase()}</span></td>
+                </tr>
+            `;
+        });
+        document.getElementById('tradesTableBody').innerHTML = html || '<tr><td colspan="13" style="text-align:center; color:var(--text-muted);">No simulated trades resolved.</td></tr>';
+    }
+
+    function renderEquityChart() {
+        const ctx = document.getElementById('equityChart').getContext('2d');
+        const step = Math.max(1, Math.floor(EQUITY_CURVE.length / 500));
+        const sampled = EQUITY_CURVE.filter((_, i) => i % step === 0 || i === EQUITY_CURVE.length - 1);
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        const isProfit = REPORT.total_return_pct >= 0;
+        gradient.addColorStop(0, isProfit ? 'rgba(16,185,129,0.3)' : 'rgba(244,63,94,0.3)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: sampled.map(d => d.date),
+                datasets: [{
+                    label: 'Portfolio Equity ($)',
+                    data: sampled.map(d => d.equity),
+                    borderColor: isProfit ? '#10b981' : '#f43f5e',
+                    backgroundColor: gradient,
+                    fill: true,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.1
+                }, {
+                    label: 'Starting Capital',
+                    data: sampled.map(() => REPORT.starting_capital),
+                    borderColor: 'rgba(100,116,139,0.5)',
+                    borderDash: [5, 5],
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                    legend: { labels: { color: '#94a3b8', font: { family: 'Inter', size: 12 } } }
+                },
+                scales: {
+                    x: { ticks: { color: '#64748b', maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    y: { ticks: { color: '#64748b', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                }
+            }
+        });
+    }
+
+    window.onload = loadData;
+</script>
+</body>
+</html>

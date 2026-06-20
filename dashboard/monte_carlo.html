@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ApexSpreadator Monte Carlo Symbol Matrix</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0e14;
+            --bg-secondary: #131722;
+            --bg-card: #1c2030;
+            --border: #2a2e3f;
+            
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            
+            --accent-indigo: #6366f1;
+            --accent-purple: #8b5cf6;
+            --accent-emerald: #10b981;
+            --accent-rose: #f43f5e;
+            --accent-amber: #f59e0b;
+
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            line-height: 1.5;
+            padding: 24px;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        /* ── Header ── */
+        .header {
+            background: linear-gradient(135deg, #1e1b4b 0%, #1e293b 100%);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-title h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 4px;
+            background: linear-gradient(to right, #a5b4fc, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header-title p { color: var(--text-secondary); font-size: 14px; }
+        .logo-badge {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-purple));
+            padding: 10px 18px;
+            border-radius: 99px;
+            font-size: 16px;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .section-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 12px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 500px;
+            width: 100%;
+            margin-bottom: 24px;
+        }
+
+        /* Data Table */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .data-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+        }
+        .data-table th:hover { color: var(--text-primary); }
+        .data-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-family: 'Inter', sans-serif;
+        }
+        .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+        .mono { font-family: 'JetBrains Mono', monospace !important; }
+
+        .sector-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-indigo);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 32px 0;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+        
+        .stat-val.positive { color: var(--accent-emerald); font-weight: 600;}
+        .stat-val.negative { color: var(--accent-rose); font-weight: 600;}
+        .stat-val.warning { color: var(--accent-amber); font-weight: 600;}
+
+        /* Loader */
+        .loading-overlay {
+            position: fixed; inset: 0; background: var(--bg-primary);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 999; transition: opacity 0.4s;
+        }
+        .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+        .spinner {
+            width: 48px; height: 48px; border: 3px solid var(--border);
+            border-top-color: var(--accent-indigo); border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin-bottom: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+    </style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <div style="color: var(--text-secondary); font-size: 14px;">Loading Monte Carlo Matrix...</div>
+</div>
+
+<div class="container">
+    <header class="header">
+        <div class="header-title">
+            <h1>ApexSpreadator Symbol Matrix</h1>
+            <p>Monte Carlo 1000-Path Simulation (100 Symbols • Future 50-Trade Sequences)</p>
+        </div>
+        <div class="logo-badge">
+            <span>🎲 Monte Carlo Explorer</span>
+        </div>
+    </header>
+    
+    <div style="margin-bottom: 24px;">
+        <a href="backtest_report.html" style="color:var(--accent-indigo); text-decoration:none; font-weight:600;">← Back to Main Portfolio Dashboard</a>
+    </div>
+
+    <!-- Bubble Chart Section -->
+    <div class="section">
+        <div class="section-title"><span class="icon">🌌</span> Reward vs Probability Matrix</div>
+        <p style="color:var(--text-secondary); font-size:13px; margin-bottom:16px;">
+            Y-Axis: Expected PnL (Median Path) | X-Axis: Historical Win Rate | Bubble Color/Size: Monte Carlo Probability of Profit. 
+            <strong>Look for large green bubbles in the top right quadrant.</strong>
+        </p>
+        <div class="chart-container">
+            <canvas id="matrixChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Data Table Section -->
+    <div class="section">
+        <div class="section-title"><span class="icon">📊</span> Individual Symbol Rankings</div>
+        <table class="data-table" id="symbolTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable('symbol')">Symbol ↕</th>
+                    <th onclick="sortTable('sector')">Sector ↕</th>
+                    <th onclick="sortTable('trades')">Historical Trades ↕</th>
+                    <th onclick="sortTable('win_rate')">Win Rate ↕</th>
+                    <th onclick="sortTable('pnl')">Historical PnL ↕</th>
+                    <th onclick="sortTable('mc_prob_profit')">MC Prob Profit ↕</th>
+                    <th onclick="sortTable('mc_pessimistic_pnl')">Pessimistic PnL (5th) ↕</th>
+                    <th onclick="sortTable('mc_expected_pnl')">Expected PnL (50th) ↕</th>
+                    <th onclick="sortTable('mc_optimistic_pnl')">Optimistic PnL (95th) ↕</th>
+                </tr>
+            </thead>
+            <tbody id="symbolTableBody"></tbody>
+        </table>
+    </div>
+
+    <footer class="footer">
+        ApexSpreadator Monte Carlo Engine • Simulated from Historical Empirical PnL Distributions
+    </footer>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<script>
+    let RESULTS = [];
+    let sortCol = 'mc_expected_pnl';
+    let sortAsc = false;
+
+    async function init() {
+        try {
+            const res = await fetch('../data/symbol_analysis_results.json');
+            RESULTS = await res.json();
+            
+            // Render Chart
+            renderChart();
+            
+            // Render Table
+            renderTable();
+
+            // Hide loading
+            setTimeout(() => {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+            }, 200);
+
+        } catch (e) {
+            console.error(e);
+            document.getElementById('loadingOverlay').innerHTML = `
+                <div style="color: var(--accent-rose); font-size: 16px; text-align:center; padding: 40px;">
+                    <div style="font-size:48px; margin-bottom:16px;">⚠️</div>
+                    <strong>Could not load Monte Carlo data.</strong><br>
+                    <span style="color:var(--text-muted); font-size:13px;">
+                        Make sure you run <code>python tools/sector_backtest.py</code> to generate the symbol results.
+                    </span>
+                </div>`;
+        }
+    }
+
+    function renderChart() {
+        const ctx = document.getElementById('matrixChart').getContext('2d');
+        
+        // Filter out symbols with very few trades to avoid noise
+        const dataPoints = RESULTS.filter(r => r.trades >= 3).map(r => {
+            const isSafe = r.mc_prob_profit >= 0.5;
+            return {
+                x: r.win_rate,
+                y: r.mc_expected_pnl,
+                r: Math.max(4, r.mc_prob_profit * 25), // Size = probability of profit
+                symbol: r.symbol,
+                prob: r.mc_prob_profit,
+                bgColor: isSafe ? `rgba(16, 185, 129, ${0.4 + r.mc_prob_profit*0.5})` : `rgba(244, 63, 94, ${1.0 - r.mc_prob_profit})`,
+                borderColor: isSafe ? '#10b981' : '#f43f5e'
+            };
+        });
+
+        new Chart(ctx, {
+            type: 'bubble',
+            data: {
+                datasets: [{
+                    label: 'Symbols',
+                    data: dataPoints,
+                    backgroundColor: dataPoints.map(d => d.bgColor),
+                    borderColor: dataPoints.map(d => d.borderColor),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const d = ctx.raw;
+                                return `${d.symbol} | E[PnL]: $${d.y.toLocaleString()} | Win Rate: ${d.x.toFixed(1)}% | Prob Profit: ${(d.prob*100).toFixed(1)}%`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Historical Win Rate (%)', color: '#94a3b8' },
+                        ticks: { color: '#64748b' },
+                        grid: { color: 'rgba(255,255,255,0.03)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Monte Carlo Expected PnL ($)', color: '#94a3b8' },
+                        ticks: { color: '#64748b', callback: v => '$' + v.toLocaleString() },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                }
+            }
+        });
+    }
+
+    function sortTable(col) {
+        if (sortCol === col) {
+            sortAsc = !sortAsc;
+        } else {
+            sortCol = col;
+            sortAsc = false;
+        }
+        renderTable();
+    }
+
+    function renderTable() {
+        const sorted = [...RESULTS].sort((a, b) => {
+            let valA = a[sortCol];
+            let valB = b[sortCol];
+            if (typeof valA === 'string') {
+                return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+            }
+            return sortAsc ? valA - valB : valB - valA;
+        });
+
+        const tbody = document.getElementById('symbolTableBody');
+        let html = '';
+
+        sorted.forEach(r => {
+            const histPnlCls = r.pnl >= 0 ? 'positive' : 'negative';
+            const probCls = r.mc_prob_profit >= 0.6 ? 'positive' : (r.mc_prob_profit >= 0.4 ? 'warning' : 'negative');
+            const expCls = r.mc_expected_pnl >= 0 ? 'positive' : 'negative';
+
+            html += `
+                <tr>
+                    <td style="font-weight:700;">${r.symbol}</td>
+                    <td><span class="sector-badge">${r.sector}</span></td>
+                    <td class="mono">${r.trades}</td>
+                    <td class="mono">${r.win_rate.toFixed(1)}%</td>
+                    <td class="mono stat-val ${histPnlCls}">${r.pnl >= 0 ? '+' : ''}$${r.pnl.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                    <td class="mono stat-val ${probCls}">${(r.mc_prob_profit * 100).toFixed(1)}%</td>
+                    <td class="mono stat-val ${r.mc_pessimistic_pnl >= 0 ? 'positive' : 'negative'}">${r.mc_pessimistic_pnl >= 0 ? '+' : ''}$${r.mc_pessimistic_pnl.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                    <td class="mono stat-val ${expCls}">${r.mc_expected_pnl >= 0 ? '+' : ''}$${r.mc_expected_pnl.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                    <td class="mono stat-val ${r.mc_optimistic_pnl >= 0 ? 'positive' : 'negative'}">${r.mc_optimistic_pnl >= 0 ? '+' : ''}$${r.mc_optimistic_pnl.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                </tr>
+            `;
+        });
+        
+        tbody.innerHTML = html;
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
