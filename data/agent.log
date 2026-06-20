@@ -1,4 +1,0 @@
-2026-06-20 19:10:05 | INFO     | ApexSpreadator.Journal | Loaded 0 journal entries
-2026-06-20 19:10:05 | INFO     | ApexSpreadator.Learning | 📉 Trade analyzed: SPY | LOSS $-536.65 | Symbol win rate: 0.0% | Total trades analyzed: 1
-2026-06-20 19:10:06 | INFO     | ApexSpreadator.Ollama | ✅ Ollama available with model 'gemma4:31b'
-2026-06-20 19:15:06 | ERROR    | ApexSpreadator.Ollama | Ollama generation error: 
