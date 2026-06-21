@@ -134,6 +134,32 @@ class StrategyEngine:
         symbol = opportunity.symbol
         spread = opportunity.spread
 
+        # Enforce 20-period EMA trend filter
+        tracker = self.get_tracker(symbol)
+        closes = [c["close"] for c in tracker.candles]
+        
+        if len(closes) < 20:
+            return False, "Not enough data for 20 EMA filter"
+            
+        # Calculate 20 EMA: SMA of first 20 as start, then smooth
+        ema_20 = sum(closes[:20]) / 20.0
+        alpha = 2.0 / (20 + 1)
+        for val in closes[20:]:
+            ema_20 = alpha * val + (1.0 - alpha) * ema_20
+            
+        current_price = closes[-1]
+        
+        if opportunity.direction == "BULLISH":
+            if current_price < ema_20:
+                msg = "Rejected: Bullish debit spread counter-trend (Price < 20 EMA)"
+                logger.info(msg)
+                return False, msg
+        elif opportunity.direction == "BEARISH":
+            if current_price > ema_20:
+                msg = "Rejected: Bearish debit spread counter-trend (Price > 20 EMA)"
+                logger.info(msg)
+                return False, msg
+
         # Check market hours (skip in backtest where broker is None)
         if self.broker is not None and not is_market_hours(self.config.schedule.market_open, self.config.schedule.market_close):
             return False, "Outside regular market hours"
