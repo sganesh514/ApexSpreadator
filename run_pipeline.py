@@ -32,8 +32,8 @@ def clean_data_dir():
 
     for item in os.listdir(data_dir):
         item_path = os.path.join(data_dir, item)
-        # Keep the download script
-        if item == "download_historical.py":
+        # Keep critical persistence files, logs, and download script
+        if item in ["download_historical.py", "learning_state.json", "journal.json", "agent.log", "symbol_analysis_results.json"]:
             continue
         try:
             if os.path.isfile(item_path) or os.path.islink(item_path):
