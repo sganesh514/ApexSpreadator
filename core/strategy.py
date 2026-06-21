@@ -138,25 +138,25 @@ class StrategyEngine:
         tracker = self.get_tracker(symbol)
         closes = [c["close"] for c in tracker.candles]
         
-        if len(closes) < 20:
-            return False, "Not enough data for 20 EMA filter"
+        if len(closes) < 10:
+            return False, "Not enough data for 10 EMA filter"
             
-        # Calculate 20 EMA: SMA of first 20 as start, then smooth
-        ema_20 = sum(closes[:20]) / 20.0
-        alpha = 2.0 / (20 + 1)
-        for val in closes[20:]:
-            ema_20 = alpha * val + (1.0 - alpha) * ema_20
+        # Calculate 10 EMA: SMA of first 10 as start, then smooth
+        ema_10 = sum(closes[:10]) / 10.0
+        alpha = 2.0 / (10 + 1)
+        for val in closes[10:]:
+            ema_10 = alpha * val + (1.0 - alpha) * ema_10
             
         current_price = closes[-1]
         
         if opportunity.direction == "BULLISH":
-            if current_price < ema_20:
-                msg = "Rejected: Bullish debit spread counter-trend (Price < 20 EMA)"
+            if current_price < ema_10:
+                msg = "Rejected: Bullish debit spread counter-trend (Price < 10 EMA)"
                 logger.info(msg)
                 return False, msg
         elif opportunity.direction == "BEARISH":
-            if current_price > ema_20:
-                msg = "Rejected: Bearish debit spread counter-trend (Price > 20 EMA)"
+            if current_price > ema_10:
+                msg = "Rejected: Bearish debit spread counter-trend (Price > 10 EMA)"
                 logger.info(msg)
                 return False, msg
 
