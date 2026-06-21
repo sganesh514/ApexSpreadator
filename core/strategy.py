@@ -9,7 +9,7 @@ from models import Opportunity, Position, VerticalSpread, TradeStatus, ExitReaso
 from core.broker_base import BrokerBase
 from core.risk_manager import RiskManager
 from core.underlying_tracker import UnderlyingTracker
-from core.options_selector import OptionsSelector
+from core.options_selector import OptionsSelector, BrokerDataError
 from utils import get_logger, generate_id, now_iso, is_market_hours, format_currency, format_pnl
 
 logger = get_logger("Strategy")
@@ -92,17 +92,21 @@ class StrategyEngine:
             pass
 
         # Select option vertical spread and apply R:R check
-        spread, status = self.selector.select_spread(
-            symbol=symbol,
-            direction=direction,
-            underlying_price=current_price,
-            target_tp=target_tp,
-            target_sl=target_sl,
-            expiration=expiration_date,
-            dte=dte,
-            iv=iv_val,
-            options_chain=None  # Can be passed in live mode
-        )
+        try:
+            spread, status = self.selector.select_spread(
+                symbol=symbol,
+                direction=direction,
+                underlying_price=current_price,
+                target_tp=target_tp,
+                target_sl=target_sl,
+                expiration=expiration_date,
+                dte=dte,
+                iv=iv_val,
+                options_chain=None,  # Can be passed in live mode
+                is_backtesting=(self.broker is None)
+            )
+        except BrokerDataError as err:
+            spread, status = None, str(err)
 
         if not spread:
             logger.info(f"⚠️ [{symbol}] Retest signal at {current_price:.2f} did not result in an actionable spread: {status}")
