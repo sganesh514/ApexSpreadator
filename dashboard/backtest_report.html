@@ -1,20 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>ApexSpreadator Backtest Performance Report</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg-primary: #0b0e14;
             --bg-secondary: #131722;
             --bg-card: #1c2030;
             --border: #2a2e3f;
-            
+
             --text-primary: #ffffff;
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
-            
+
             --accent-indigo: #6366f1;
             --accent-purple: #8b5cf6;
             --accent-emerald: #10b981;
@@ -28,7 +31,12 @@
             --radius-lg: 16px;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
             background-color: var(--bg-primary);
             color: var(--text-primary);
@@ -49,11 +57,12 @@
             border-radius: var(--radius-lg);
             padding: 28px 32px;
             margin-bottom: 24px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
+
         .header-title h1 {
             font-family: 'Outfit', sans-serif;
             font-size: 28px;
@@ -64,10 +73,12 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
+
         .header-title p {
             color: var(--text-secondary);
             font-size: 14px;
         }
+
         .logo-badge {
             font-family: 'Outfit', sans-serif;
             font-weight: 800;
@@ -89,6 +100,7 @@
             border-bottom: 1px solid var(--border);
             padding-bottom: 12px;
         }
+
         .tab-btn {
             background: transparent;
             border: 1px solid transparent;
@@ -100,27 +112,35 @@
             cursor: pointer;
             transition: all 0.2s ease;
         }
+
         .tab-btn:hover {
             color: var(--text-primary);
-            background: rgba(255,255,255,0.03);
+            background: rgba(255, 255, 255, 0.03);
         }
+
         .tab-btn.active {
             color: var(--text-primary);
             background: var(--bg-card);
             border-color: var(--border);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
         /* ── Grid/Layout ── */
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
         .kpi-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: 16px;
             margin-bottom: 24px;
         }
+
         .kpi-card {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
@@ -129,15 +149,28 @@
             position: relative;
             overflow: hidden;
         }
+
         .kpi-card::after {
             content: '';
             position: absolute;
-            top: 0; left: 0; width: 4px; height: 100%;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
             background: var(--accent-indigo);
         }
-        .kpi-card.positive::after { background: var(--accent-emerald); }
-        .kpi-card.negative::after { background: var(--accent-rose); }
-        .kpi-card.warning::after { background: var(--accent-amber); }
+
+        .kpi-card.positive::after {
+            background: var(--accent-emerald);
+        }
+
+        .kpi-card.negative::after {
+            background: var(--accent-rose);
+        }
+
+        .kpi-card.warning::after {
+            background: var(--accent-amber);
+        }
 
         .kpi-label {
             font-size: 11px;
@@ -146,12 +179,14 @@
             letter-spacing: 0.5px;
             margin-bottom: 8px;
         }
+
         .kpi-value {
             font-family: 'Outfit', sans-serif;
             font-size: 22px;
             font-weight: 700;
             margin-bottom: 4px;
         }
+
         .kpi-sub {
             font-size: 12px;
             color: var(--text-muted);
@@ -165,8 +200,9 @@
             border-radius: var(--radius-lg);
             padding: 24px;
             margin-bottom: 24px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
+
         .section-title {
             font-family: 'Outfit', sans-serif;
             font-size: 18px;
@@ -175,13 +211,26 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             padding-bottom: 12px;
         }
-        .section-title .icon { font-size: 20px; }
 
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
-        @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+        .section-title .icon {
+            font-size: 20px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
 
         /* Tables */
         .data-table {
@@ -189,6 +238,7 @@
             border-collapse: collapse;
             font-size: 13px;
         }
+
         .data-table th {
             text-align: left;
             padding: 12px 16px;
@@ -199,15 +249,20 @@
             font-size: 11px;
             letter-spacing: 0.5px;
         }
+
         .data-table td {
             padding: 12px 16px;
-            border-bottom: 1px solid rgba(255,255,255,0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
             font-family: 'Inter', sans-serif;
         }
+
         .data-table tr:hover td {
-            background: rgba(255,255,255,0.02);
+            background: rgba(255, 255, 255, 0.02);
         }
-        .mono { font-family: 'JetBrains Mono', monospace !important; }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace !important;
+        }
 
         /* Market Bias Styles */
         .bias-badge {
@@ -219,9 +274,24 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        .bias-badge.bullish { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
-        .bias-badge.bearish { background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3); }
-        .bias-badge.neutral { background: rgba(148, 163, 184, 0.15); color: var(--text-secondary); border: 1px solid rgba(148, 163, 184, 0.3); }
+
+        .bias-badge.bullish {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-emerald);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .bias-badge.bearish {
+            background: rgba(244, 63, 94, 0.15);
+            color: var(--accent-rose);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+        }
+
+        .bias-badge.neutral {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--text-secondary);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
 
         /* Zone Styles */
         .zone-pill {
@@ -232,8 +302,16 @@
             font-weight: 600;
             margin-right: 4px;
         }
-        .zone-pill.demand { background: rgba(16,185,129,0.15); color: var(--accent-emerald); }
-        .zone-pill.supply { background: rgba(244,63,94,0.15); color: var(--accent-rose); }
+
+        .zone-pill.demand {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-emerald);
+        }
+
+        .zone-pill.supply {
+            background: rgba(244, 63, 94, 0.15);
+            color: var(--accent-rose);
+        }
 
         /* Proximity Tracker */
         .proximity-container {
@@ -241,22 +319,25 @@
             flex-direction: column;
             gap: 12px;
         }
+
         .proximity-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 10px;
             border-radius: var(--radius-sm);
-            background: rgba(255,255,255,0.01);
-            border: 1px solid rgba(255,255,255,0.03);
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.03);
         }
+
         .proximity-bar-outer {
             width: 150px;
             height: 10px;
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 5px;
             overflow: hidden;
         }
+
         .proximity-bar-inner {
             height: 100%;
             border-radius: 5px;
@@ -276,8 +357,16 @@
             font-size: 10px;
             font-weight: 700;
         }
-        .status-badge.approved { background: rgba(16,185,129,0.15); color: var(--accent-emerald); }
-        .status-badge.rejected { background: rgba(244,63,94,0.15); color: var(--accent-rose); }
+
+        .status-badge.approved {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-emerald);
+        }
+
+        .status-badge.rejected {
+            background: rgba(244, 63, 94, 0.15);
+            color: var(--accent-rose);
+        }
 
         /* Loader Overlay */
         .loading-overlay {
@@ -291,16 +380,27 @@
             z-index: 999;
             transition: opacity 0.4s;
         }
-        .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         .spinner {
-            width: 48px; height: 48px;
+            width: 48px;
+            height: 48px;
             border: 3px solid var(--border);
             border-top-color: var(--accent-indigo);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin-bottom: 16px;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         .footer {
             text-align: center;
@@ -310,199 +410,463 @@
         }
     </style>
 </head>
+
 <body>
 
-<div id="loadingOverlay" class="loading-overlay">
-    <div class="spinner"></div>
-    <div style="color: var(--text-secondary); font-size: 14px;">Running Price Action & Spread Simulator...</div>
-</div>
-
-<div class="container">
-    <header class="header">
-        <div class="header-title">
-            <h1>ApexSpreadator Backtest Report</h1>
-            <p>Bidirectional Price Action Strategy with Supply/Demand Zones & Vertical Debit Spreads</p>
-        </div>
-        <div class="logo-badge">
-            <span>⚡ ApexSpreadator</span>
-        </div>
-    </header>
-
-    <div class="tabs">
-        <button class="tab-btn active" data-tab="overview">📊 Performance Overview</button>
-        <button class="tab-btn" data-tab="market">🧭 Market Structure</button>
-        <button class="tab-btn" data-tab="risklogs">🛡️ Risk Filter Logs</button>
-        <button class="tab-btn" data-tab="equity">📈 Equity Curve</button>
-        <button class="tab-btn" data-tab="trades">📋 Trade Log</button>
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <div style="color: var(--text-secondary); font-size: 14px;">Running Price Action & Spread Simulator...</div>
     </div>
 
-    <!-- ═══════════════ TAB: OVERVIEW ═══════════════ -->
-    <div class="tab-content active" id="tabContent-overview">
-        <div class="kpi-grid" id="kpiGrid"></div>
-
-        <div class="grid-2">
-            <!-- Market structure summary -->
-            <div class="section">
-                <div class="section-title"><span class="icon">🧭</span> Current Market Bias</div>
-                <div id="biasSummary" style="display:flex; flex-direction:column; gap:16px;"></div>
+    <div class="container">
+        <header class="header">
+            <div class="header-title">
+                <h1>ApexSpreadator Backtest Report</h1>
+                <p>Bidirectional Price Action Strategy with Supply/Demand Zones & Vertical Debit Spreads</p>
             </div>
-
-            <!-- Proximity tracker -->
-            <div class="section">
-                <div class="section-title"><span class="icon">🎯</span> Active Zones & Proximity</div>
-                <div id="proximityList" class="proximity-container"></div>
+            <div class="logo-badge">
+                <span>⚡ ApexSpreadator</span>
             </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="overview">📊 Performance Overview</button>
+            <button class="tab-btn" data-tab="market">🧭 Market Structure</button>
+            <button class="tab-btn" data-tab="risklogs">🛡️ Risk Filter Logs</button>
+            <button class="tab-btn" data-tab="equity">📈 Equity Curve</button>
+            <button class="tab-btn" data-tab="trades">📋 Trade Log</button>
+            <button class="tab-btn" data-tab="symbols">🏆 Symbol Performance</button>
+            <button class="tab-btn" data-tab="insights">💡 Performance Insights</button>
         </div>
 
-        <div class="section">
-            <div class="section-title"><span class="icon">📋</span> Win/Loss & Metrics breakdown</div>
+        <!-- ═══════════════ TAB: OVERVIEW ═══════════════ -->
+        <div class="tab-content active" id="tabContent-overview">
+            <div class="kpi-grid" id="kpiGrid"></div>
+
             <div class="grid-2">
-                <div style="display:flex; flex-direction:column; gap:12px;">
-                    <div style="display:flex; justify-content:space-between;"><span>Winning Trades:</span><span id="winningCount" class="mono" style="color:var(--accent-emerald);"></span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>Losing Trades:</span><span id="losingCount" class="mono" style="color:var(--accent-rose);"></span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>Average Win:</span><span id="avgWinAmount" class="mono"></span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>Average Loss:</span><span id="avgLossAmount" class="mono"></span></div>
+                <!-- Top 3 Winners -->
+                <div class="section">
+                    <div class="section-title" style="color: var(--accent-emerald);"><span class="icon">🥇</span> Top 3
+                        Winners</div>
+                    <div id="topWinnersList" style="display:flex; flex-direction:column; gap:16px;"></div>
                 </div>
-                <div style="display:flex; flex-direction:column; gap:12px;">
-                    <div style="display:flex; justify-content:space-between;"><span>Max Drawdown:</span><span id="maxDrawdownVal" class="mono" style="color:var(--accent-rose);"></span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>Max Drawdown Date:</span><span id="maxDrawdownDateVal" class="mono"></span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>Sharpe Ratio:</span><span id="sharpeRatioVal" class="mono"></span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>Average Hold:</span><span id="avgHoldVal" class="mono"></span></div>
+
+                <!-- Top 3 Losers -->
+                <div class="section">
+                    <div class="section-title" style="color: var(--accent-rose);"><span class="icon">💀</span> Top 3
+                        Losers</div>
+                    <div id="topLosersList" style="display:flex; flex-direction:column; gap:16px;"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title"><span class="icon">📋</span> Win/Loss & Metrics breakdown</div>
+                <div class="grid-2">
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                        <div style="display:flex; justify-content:space-between;"><span>Winning Trades:</span><span
+                                id="winningCount" class="mono" style="color:var(--accent-emerald);"></span></div>
+                        <div style="display:flex; justify-content:space-between;"><span>Losing Trades:</span><span
+                                id="losingCount" class="mono" style="color:var(--accent-rose);"></span></div>
+                        <div style="display:flex; justify-content:space-between;"><span>Average Win:</span><span
+                                id="avgWinAmount" class="mono"></span></div>
+                        <div style="display:flex; justify-content:space-between;"><span>Average Loss:</span><span
+                                id="avgLossAmount" class="mono"></span></div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                        <div style="display:flex; justify-content:space-between;"><span>Max Drawdown:</span><span
+                                id="maxDrawdownVal" class="mono" style="color:var(--accent-rose);"></span></div>
+                        <div style="display:flex; justify-content:space-between;"><span>Max Drawdown Date:</span><span
+                                id="maxDrawdownDateVal" class="mono"></span></div>
+                        <div style="display:flex; justify-content:space-between;"><span>Sharpe Ratio:</span><span
+                                id="sharpeRatioVal" class="mono"></span></div>
+                        <div style="display:flex; justify-content:space-between;"><span>Average Hold:</span><span
+                                id="avgHoldVal" class="mono"></span></div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- ═══════════════ TAB: MARKET STRUCTURE ═══════════════ -->
-    <div class="tab-content" id="tabContent-market">
-        <div class="section">
-            <div class="section-title"><span class="icon">🏰</span> Active Supply / Demand Zones</div>
-            <table class="data-table" id="zonesTable">
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th>Zone ID</th>
-                        <th>Type</th>
-                        <th>Range / Coordinates</th>
-                        <th>Formed At</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody id="zonesTableBody"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- ═══════════════ TAB: RISK FILTER LOGS ═══════════════ -->
-    <div class="tab-content" id="tabContent-risklogs">
-        <div class="section">
-            <div class="section-title"><span class="icon">🛡️</span> Strict Risk Filter Logs (2.5:1 R:R Rule)</div>
-            <p style="color:var(--text-secondary); font-size:12px; margin-bottom:16px;">
-                Logs showing all retest opportunities detected on the chart, their option debit translation, calculated R:R, and whether they passed the 2.5:1 risk filter.
-            </p>
-            <table class="data-table" id="riskLogsTable">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Symbol</th>
-                        <th>Signal</th>
-                        <th>Price</th>
-                        <th>Strikes (Long/Short)</th>
-                        <th>Net Debit</th>
-                        <th>Calculated R:R</th>
-                        <th>Status / Rejection Reason</th>
-                    </tr>
-                </thead>
-                <tbody id="riskLogsTableBody"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- ═══════════════ TAB: EQUITY CURVE ═══════════════ -->
-    <div class="tab-content" id="tabContent-equity">
-        <div class="section">
-            <div class="section-title"><span class="icon">📈</span> Portfolio Equity Curve</div>
-            <div class="chart-container" style="height: 400px;">
-                <canvas id="equityChart"></canvas>
+        <!-- ═══════════════ TAB: MARKET STRUCTURE ═══════════════ -->
+        <div class="tab-content" id="tabContent-market">
+            <div class="section">
+                <div class="section-title"><span class="icon">🏰</span> Active Supply / Demand Zones</div>
+                <table class="data-table" id="zonesTable">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Zone ID</th>
+                            <th>Type</th>
+                            <th>Range / Coordinates</th>
+                            <th>Formed At</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="zonesTableBody"></tbody>
+                </table>
             </div>
         </div>
-    </div>
 
-    <!-- ═══════════════ TAB: TRADE LOG ═══════════════ -->
-    <div class="tab-content" id="tabContent-trades">
-        <div class="section">
-            <div class="section-title"><span class="icon">📋</span> Simulated Trade Log</div>
-            <table class="data-table" id="tradesTable">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Symbol</th>
-                        <th>Type</th>
-                        <th>Strikes</th>
-                        <th>Expiration</th>
-                        <th>Qty</th>
-                        <th>Entry Price</th>
-                        <th>Exit Price</th>
-                        <th>P&L</th>
-                        <th>Return</th>
-                        <th>Entry Date</th>
-                        <th>Exit Date</th>
-                        <th>Reason</th>
-                    </tr>
-                </thead>
-                <tbody id="tradesTableBody"></tbody>
-            </table>
+        <!-- ═══════════════ TAB: RISK FILTER LOGS ═══════════════ -->
+        <div class="tab-content" id="tabContent-risklogs">
+            <div class="section">
+                <div class="section-title"><span class="icon">🛡️</span> Strict Risk Filter Logs (2.5:1 R:R Rule)</div>
+                <p style="color:var(--text-secondary); font-size:12px; margin-bottom:16px;">
+                    Logs showing all retest opportunities detected on the chart, their option debit translation,
+                    calculated R:R, and whether they passed the 2.5:1 risk filter.
+                </p>
+                <table class="data-table" id="riskLogsTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Symbol</th>
+                            <th>Signal</th>
+                            <th>Price</th>
+                            <th>Strikes (Long/Short)</th>
+                            <th>Net Debit</th>
+                            <th>Calculated R:R</th>
+                            <th>Status / Rejection Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="riskLogsTableBody"></tbody>
+                </table>
+            </div>
         </div>
+
+        <!-- ═══════════════ TAB: EQUITY CURVE ═══════════════ -->
+        <div class="tab-content" id="tabContent-equity">
+            <div class="section">
+                <div class="section-title"><span class="icon">📈</span> Portfolio Equity Curve</div>
+                <div class="chart-container" style="height: 400px;">
+                    <canvas id="equityChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════ TAB: TRADE LOG ═══════════════ -->
+        <div class="tab-content" id="tabContent-trades">
+            <div class="section">
+                <div class="section-title"><span class="icon">📋</span> Simulated Trade Log</div>
+                <table class="data-table" id="tradesTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Symbol</th>
+                            <th>Type</th>
+                            <th>Strikes</th>
+                            <th>Expiration</th>
+                            <th>Qty</th>
+                            <th>Entry Price</th>
+                            <th>Exit Price</th>
+                            <th>P&L</th>
+                            <th>Return</th>
+                            <th>Entry Date</th>
+                            <th>Exit Date</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tradesTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ═══════════════ TAB: SYMBOL PERFORMANCE ═══════════════ -->
+        <div class="tab-content" id="tabContent-symbols">
+            <div class="section">
+                <div class="section-title"><span class="icon">🏆</span> Symbol Performance Rankings</div>
+                <p style="color:var(--text-secondary); font-size:12px; margin-bottom:16px;">
+                    Ranks all watchlist symbols by total profit/loss, indicating the top profit leaders and top loss
+                    leaders.
+                </p>
+                <div class="grid-2" style="margin-bottom: 24px;">
+                    <div class="kpi-card positive" style="padding: 16px;">
+                        <div class="kpi-label">🥇 Highest Profit Symbol</div>
+                        <div class="kpi-value" id="topProfitLeader">--</div>
+                        <div class="kpi-sub" id="topProfitValue">--</div>
+                    </div>
+                    <div class="kpi-card negative" style="padding: 16px;">
+                        <div class="kpi-label">💀 Highest Loss Symbol</div>
+                        <div class="kpi-value" id="topLossLeader">--</div>
+                        <div class="kpi-sub" id="topLossValue">--</div>
+                    </div>
+                </div>
+                <table class="data-table" id="symbolsPerformanceTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Symbol</th>
+                            <th>Total Trades</th>
+                            <th>Wins</th>
+                            <th>Losses</th>
+                            <th>Win Rate</th>
+                            <th>Total P&L</th>
+                            <th>Performance Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="symbolsPerformanceTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ═══════════════ TAB: INSIGHTS ═══════════════ -->
+        <div class="tab-content" id="tabContent-insights">
+            <!-- Expectancy Overview Header -->
+            <div class="section"
+                style="background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); border-color: rgba(99, 102, 241, 0.2);">
+                <div class="section-title"><span class="icon">💡</span> Strategy Performance & Expectancy Insights</div>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <p style="color: var(--text-primary); font-size:14px; line-height: 1.6;">
+                        The strategy exhibits a highly robust <strong>Positive Risk-to-Reward Asymmetry</strong>.
+                        Although the raw win rate is moderate, the profit factor is elevated because the average winning
+                        trade is substantially larger than the average losing trade. Controlled drawdowns combined with
+                        targeted high-expected-value setups drive the performance.
+                    </p>
+                    <div class="grid-2" style="margin-top: 12px; gap: 16px;">
+                        <div
+                            style="background: rgba(255, 255, 255, 0.02); padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-secondary); font-size: 13px;">Win Expectancy Ratio (Avg Win /
+                                Avg Loss):</span>
+                            <span id="winExpectancyRatio" class="mono"
+                                style="font-size:18px; font-weight:700; color:var(--accent-emerald);">--</span>
+                        </div>
+                        <div
+                            style="background: rgba(255, 255, 255, 0.02); padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-secondary); font-size: 13px;">Profit Expectancy per
+                                Trade:</span>
+                            <span id="profitExpectancyVal" class="mono"
+                                style="font-size:18px; font-weight:700; color:var(--accent-cyan);">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <!-- Directional Trend Filter and Hold Times -->
+                <div class="section">
+                    <div class="section-title"><span class="icon">📈</span> Directional & Hold Time Dynamics</div>
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        <div>
+                            <h4
+                                style="font-size: 13px; font-weight:600; color:var(--text-secondary); margin-bottom: 8px;">
+                                Directional Bias Analysis</h4>
+                            <div style="display:flex; flex-direction:column; gap:8px;">
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:center; padding: 10px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 6px;">
+                                    <span>Bullish Trades (Bull Call/Put):</span>
+                                    <span id="bullishPerformance" class="mono" style="font-weight: 600;">--</span>
+                                </div>
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:center; padding: 10px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 6px;">
+                                    <span>Bearish Trades (Bear Put/Call):</span>
+                                    <span id="bearishPerformance" class="mono" style="font-weight: 600;">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4
+                                style="font-size: 13px; font-weight:600; color:var(--text-secondary); margin-bottom: 8px;">
+                                Holding Duration Correlation</h4>
+                            <div style="display:flex; flex-direction:column; gap:8px;">
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:center; padding: 10px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 6px;">
+                                    <span>Average Winner Hold Time:</span>
+                                    <span id="avgWinHoldDays" class="mono"
+                                        style="color:var(--accent-emerald); font-weight: 600;">--</span>
+                                </div>
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:center; padding: 10px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 6px;">
+                                    <span>Average Loser Hold Time:</span>
+                                    <span id="avgLossHoldDays" class="mono"
+                                        style="color:var(--accent-rose); font-weight: 600;">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- IV Regimes and Exit Triggers -->
+                <div class="section">
+                    <div class="section-title"><span class="icon">⚡</span> Volatility & Exits Breakdown</div>
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        <div>
+                            <h4
+                                style="font-size: 13px; font-weight:600; color:var(--text-secondary); margin-bottom: 8px;">
+                                Asset Volatility Regime Analysis (Beta Groups)</h4>
+                            <div style="display:flex; flex-direction:column; gap:8px;">
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:center; padding: 10px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 6px;">
+                                    <span>Low/Medium Beta Value Assets:</span>
+                                    <span id="lowIVPerformance" class="mono" style="font-weight: 600;">--</span>
+                                </div>
+                                <div
+                                    style="display:flex; justify-content:space-between; align-items:center; padding: 10px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 6px;">
+                                    <span>High-Beta Growth Leaders:</span>
+                                    <span id="highIVPerformance" class="mono" style="font-weight: 600;">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4
+                                style="font-size: 13px; font-weight:600; color:var(--text-secondary); margin-bottom: 8px;">
+                                Exit Reason Breakdown</h4>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                <div style="display:flex; justify-content:space-between; font-size:12px;">
+                                    <span>Take Profit Target Hit:</span>
+                                    <span id="tpExitCount" class="mono">--</span>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; font-size:12px;">
+                                    <span>Stop Loss Invalidation Hit:</span>
+                                    <span id="slExitCount" class="mono">--</span>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; font-size:12px;">
+                                    <span>Time-Based / 0-DTE Expirations:</span>
+                                    <span id="timeExitCount" class="mono">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Qualitative Explanation Cards -->
+            <div class="grid-2">
+                <div class="section" style="border-left: 4px solid var(--accent-emerald);">
+                    <div class="section-title" style="color: var(--accent-emerald);"><span class="icon">📈</span> Why
+                        Some Symbols/Trades Did Well</div>
+                    <div style="font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 12px;">
+                        <div>
+                            <strong style="color: var(--text-primary);">1. High Volatility Momentum (High
+                                ATR/Beta)</strong>
+                            <p style="color: var(--text-secondary); margin-top: 4px;">
+                                High-momentum leaders like <strong>MELI</strong> (+$44.9k P&L, 75% WR) and
+                                <strong>NVDA</strong> (+$15.9k P&L, 66% WR) performed exceptionally well. Because their
+                                underlying price changes rapidly and clean trend bounces occur off supply/demand zones,
+                                the strategy hits the sold-strike take-profit levels quickly before theta or
+                                counter-trend movements eat into option prices.
+                            </p>
+                        </div>
+                        <div>
+                            <strong style="color: var(--text-primary);">2. Robust Support Retests with Volatility
+                                Buffer</strong>
+                            <p style="color: var(--text-secondary); margin-top: 4px;">
+                                Symbols like <strong>KDP</strong> and <strong>OXY</strong> benefited from strong zone
+                                respect. Retests of demand zones followed by immediate trend continuation allowed the
+                                system to maximize option credit/debit expansions with minimal drawdown, capitalizing on
+                                the SMA 20-period trend filter alignment.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section" style="border-left: 4px solid var(--accent-rose);">
+                    <div class="section-title" style="color: var(--accent-rose);"><span class="icon">📉</span> Why Some
+                        Symbols/Trades Did Poorly</div>
+                    <div style="font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 12px;">
+                        <div>
+                            <strong style="color: var(--text-primary);">1. Consolidations and Zone Breaches
+                                (Whipsawing)</strong>
+                            <p style="color: var(--text-secondary); margin-top: 4px;">
+                                Symbols like <strong>QCOM</strong> (-$4.0k P&L, 0% WR) and <strong>DXCM</strong> (-$3.6k
+                                P&L, 0% WR) experienced prolonged consolidations. When the underlying stock whipsaws and
+                                invalidates a supply/demand zone, the options structure is forced to trigger stop
+                                losses. Since vertical spreads contain capped but direct risk, multiple zone breaches
+                                cause sequential stop-outs.
+                            </p>
+                        </div>
+                        <div>
+                            <strong style="color: var(--text-primary);">2. Low Beta Inefficiencies
+                                (Underperformance)</strong>
+                            <p style="color: var(--text-secondary); margin-top: 4px;">
+                                Low-volatility symbols like <strong>CSCO</strong> and <strong>COST</strong> struggle to
+                                reach profit targets within the designated DTE window. Option spreads on these symbols
+                                are prone to stagnant price action, leading to time-decay forced exits or stop-outs on
+                                minor trend deviations.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Strategic Recommendations Section -->
+            <div class="section" style="border-left: 4px solid var(--accent-indigo);">
+                <div class="section-title"><span class="icon">🛠️</span> Actionable Strategy Optimization Plan</div>
+                <div style="font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 10px;">
+                    <p style="color: var(--text-secondary);">
+                        Based on quantitative observations, the following system tunings are recommended to optimize
+                        performance:
+                    </p>
+                    <ul
+                        style="color: var(--text-secondary); padding-left: 20px; display: flex; flex-direction: column; gap: 8px;">
+                        <li>
+                            <strong style="color: var(--text-primary);">Dynamic Position Sizing:</strong> Keep the
+                            IV-based sizing multiplier active. High volatility reduces position sizes, which
+                            successfully limits drawdowns on volatile trades while keeping larger contracts allocated to
+                            stable, low-IV setups.
+                        </li>
+                        <li>
+                            <strong style="color: var(--text-primary);">Beta Filtering:</strong> Introduce a minimum
+                            Average True Range (ATR) or Beta threshold to filter out low-volatility assets (e.g., CSCO,
+                            COST) that fail to reach targets, as they have low profit contribution and consume capital
+                            efficiency.
+                        </li>
+                        <li>
+                            <strong style="color: var(--text-primary);">Sector Exposure Cap:</strong> Maintain the
+                            sector-correlation guardrail limit of 1 position per sector. This successfully shields the
+                            portfolio from concurrent stop-loss triggers in correlated groups (e.g., semiconductors)
+                            during market-wide swings.
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <footer class="footer">
+            ApexSpreadator Backtest Dashboard • Standard Options Pricing Model (BSM) • Data from Yahoo Finance
+        </footer>
     </div>
 
-    <footer class="footer">
-        ApexSpreadator Backtest Dashboard • Standard Options Pricing Model (BSM) • Data from Yahoo Finance
-    </footer>
-</div>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script>
+        let REPORT = {};
+        let TRADES = [];
+        let EQUITY_CURVE = [];
 
-<script>
-    let REPORT = {};
-    let TRADES = [];
-    let EQUITY_CURVE = [];
+        // Tabs navigation
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-    // Tabs navigation
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
-            btn.classList.add('active');
-            document.getElementById(`tabContent-${btn.dataset.tab}`).classList.add('active');
-        });
-    });
-
-    async function loadData() {
-        try {
-            // Fetch reports
-            const reportRes = await fetch('../data/backtest_report.json');
-            REPORT = await reportRes.json();
-            if (REPORT.profit_factor === 'Infinity') {
-                REPORT.profit_factor = Infinity;
-            }
-
-            const tradesRes = await fetch('../data/backtest_trades.json');
-            TRADES = await tradesRes.json();
-
-            const curveRes = await fetch('../data/backtest_equity_curve.csv');
-            const curveText = await curveRes.text();
-            const lines = curveText.trim().split('\n').slice(1);
-            EQUITY_CURVE = lines.map(line => {
-                const [date, equity] = line.split(',');
-                return { date: date.trim(), equity: parseFloat(equity) };
+                btn.classList.add('active');
+                document.getElementById(`tabContent-${btn.dataset.tab}`).classList.add('active');
             });
+        });
 
-            renderDashboard();
-        } catch (e) {
-            console.error('Error loading backtest data:', e);
-            document.getElementById('loadingOverlay').innerHTML = `
+        async function loadData() {
+            try {
+                // Fetch reports
+                const reportRes = await fetch('../data/backtest_report.json');
+                REPORT = await reportRes.json();
+                if (REPORT.profit_factor === 'Infinity') {
+                    REPORT.profit_factor = Infinity;
+                }
+
+                const tradesRes = await fetch('../data/backtest_trades.json');
+                TRADES = await tradesRes.json();
+
+                const curveRes = await fetch('../data/backtest_equity_curve.csv');
+                const curveText = await curveRes.text();
+                const lines = curveText.trim().split('\n').slice(1);
+                EQUITY_CURVE = lines.map(line => {
+                    const [date, equity] = line.split(',');
+                    return { date: date.trim(), equity: parseFloat(equity) };
+                });
+
+                renderDashboard();
+            } catch (e) {
+                console.error('Error loading backtest data:', e);
+                document.getElementById('loadingOverlay').innerHTML = `
                 <div style="color: var(--accent-rose); font-size: 16px; text-align:center; padding: 40px;">
                     <div style="font-size:48px; margin-bottom:16px;">⚠️</div>
                     <strong>Could not load ApexSpreadator backtest data.</strong><br>
@@ -510,36 +874,39 @@
                         Ensure you run the backtester pipeline first to generate the report data in <code>data/</code> folder.
                     </span>
                 </div>`;
+            }
         }
-    }
 
-    function renderDashboard() {
-        renderKPIs();
-        renderMarketBias();
-        renderProximityTracker();
-        renderZonesTable();
-        renderRiskLogs();
-        renderTradesTable();
-        renderEquityChart();
+        function renderDashboard() {
+            renderKPIs();
+            renderMarketBias();
+            renderProximityTracker();
+            renderZonesTable();
+            renderRiskLogs();
+            renderTradesTable();
+            renderEquityChart();
+            renderSymbolsPerformance();
+            renderTopWinnersLosers();
+            renderInsights();
 
-        // Hide loader
-        setTimeout(() => {
-            document.getElementById('loadingOverlay').classList.add('hidden');
-        }, 300);
-    }
+            // Hide loader
+            setTimeout(() => {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+            }, 300);
+        }
 
-    function renderKPIs() {
-        const r = REPORT;
-        const isProfitable = r.total_pnl >= 0;
-        const cards = [
-            { label: 'Total Return', value: `${r.total_return_pct >= 0 ? '+' : ''}${r.total_return_pct}%`, cls: isProfitable ? 'positive' : 'negative', sub: `$${r.total_pnl?.toLocaleString()}` },
-            { label: 'Ending Equity', value: `$${r.ending_equity?.toLocaleString()}`, cls: isProfitable ? 'positive' : 'negative', sub: `from $${r.starting_capital?.toLocaleString()}` },
-            { label: 'Win Rate', value: `${r.win_rate_pct}%`, cls: r.win_rate_pct >= 50 ? 'positive' : 'warning', sub: `${r.winning_trades} Wins / ${r.losing_trades} Losses` },
-            { label: 'Profit Factor', value: r.profit_factor === Infinity ? '∞' : r.profit_factor?.toFixed(2), cls: r.profit_factor >= 1.5 ? 'positive' : r.profit_factor >= 1.0 ? 'warning' : 'negative', sub: `PF metric` },
-            { label: 'Sharpe Ratio', value: r.sharpe_ratio?.toFixed(2), cls: r.sharpe_ratio >= 1.0 ? 'positive' : 'warning', sub: 'Risk-adjusted return' }
-        ];
+        function renderKPIs() {
+            const r = REPORT;
+            const isProfitable = r.total_pnl >= 0;
+            const cards = [
+                { label: 'Total Return', value: `${r.total_return_pct >= 0 ? '+' : ''}${r.total_return_pct}%`, cls: isProfitable ? 'positive' : 'negative', sub: `$${r.total_pnl?.toLocaleString()}` },
+                { label: 'Ending Equity', value: `$${r.ending_equity?.toLocaleString()}`, cls: isProfitable ? 'positive' : 'negative', sub: `from $${r.starting_capital?.toLocaleString()}` },
+                { label: 'Win Rate', value: `${r.win_rate_pct}%`, cls: r.win_rate_pct >= 50 ? 'positive' : 'warning', sub: `${r.winning_trades} Wins / ${r.losing_trades} Losses` },
+                { label: 'Profit Factor', value: r.profit_factor === Infinity ? '∞' : r.profit_factor?.toFixed(2), cls: r.profit_factor >= 1.5 ? 'positive' : r.profit_factor >= 1.0 ? 'warning' : 'negative', sub: `PF metric` },
+                { label: 'Sharpe Ratio', value: r.sharpe_ratio?.toFixed(2), cls: r.sharpe_ratio >= 1.0 ? 'positive' : 'warning', sub: 'Risk-adjusted return' }
+            ];
 
-        document.getElementById('kpiGrid').innerHTML = cards.map(c => `
+            document.getElementById('kpiGrid').innerHTML = cards.map(c => `
             <div class="kpi-card ${c.cls}">
                 <div class="kpi-label">${c.label}</div>
                 <div class="kpi-value">${c.value}</div>
@@ -547,50 +914,54 @@
             </div>
         `).join('');
 
-        // Details breakdown
-        document.getElementById('winningCount').textContent = r.winning_trades;
-        document.getElementById('losingCount').textContent = r.losing_trades;
-        document.getElementById('avgWinAmount').textContent = `$${r.avg_win?.toLocaleString()}`;
-        document.getElementById('avgLossAmount').textContent = `$${r.avg_loss?.toLocaleString()}`;
-        document.getElementById('maxDrawdownVal').textContent = `${r.max_drawdown_pct}%`;
-        document.getElementById('maxDrawdownDateVal').textContent = r.max_drawdown_date;
-        document.getElementById('sharpeRatioVal').textContent = r.sharpe_ratio?.toFixed(3);
-        document.getElementById('avgHoldVal').textContent = `${r.avg_holding_days} days`;
-    }
+            // Details breakdown
+            document.getElementById('winningCount').textContent = r.winning_trades;
+            document.getElementById('losingCount').textContent = r.losing_trades;
+            document.getElementById('avgWinAmount').textContent = `$${r.avg_win?.toLocaleString()}`;
+            document.getElementById('avgLossAmount').textContent = `$${r.avg_loss?.toLocaleString()}`;
+            document.getElementById('maxDrawdownVal').textContent = `${r.max_drawdown_pct}%`;
+            document.getElementById('maxDrawdownDateVal').textContent = r.max_drawdown_date;
+            document.getElementById('sharpeRatioVal').textContent = r.sharpe_ratio?.toFixed(3);
+            document.getElementById('avgHoldVal').textContent = `${r.avg_holding_days} days`;
+        }
 
-    function renderMarketBias() {
-        const biases = REPORT.market_bias || {};
-        let html = '';
-        for (const [sym, bias] of Object.entries(biases)) {
-            const cssCls = bias.toLowerCase();
-            html += `
+        function renderMarketBias() {
+            const target = document.getElementById('biasSummary');
+            if (!target) return;
+            const biases = REPORT.market_bias || {};
+            let html = '';
+            for (const [sym, bias] of Object.entries(biases)) {
+                const cssCls = bias.toLowerCase();
+                html += `
                 <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px; background:rgba(255,255,255,0.02); border-radius:var(--radius-sm);">
                     <span style="font-weight:700;">${sym}</span>
                     <span class="bias-badge ${cssCls}">${bias}</span>
                 </div>
             `;
+            }
+            target.innerHTML = html || '<div style="color:var(--text-muted)">No bias tracked.</div>';
         }
-        document.getElementById('biasSummary').innerHTML = html || '<div style="color:var(--text-muted)">No bias tracked.</div>';
-    }
 
-    function renderProximityTracker() {
-        const zones = REPORT.active_zones || {};
-        let html = '';
-        
-        for (const [sym, activeZones] of Object.entries(zones)) {
-            if (activeZones.length === 0) {
-                html += `
+        function renderProximityTracker() {
+            const target = document.getElementById('proximityList');
+            if (!target) return;
+            const zones = REPORT.active_zones || {};
+            let html = '';
+
+            for (const [sym, activeZones] of Object.entries(zones)) {
+                if (activeZones.length === 0) {
+                    html += `
                     <div class="proximity-row">
                         <span style="font-weight:600;">${sym}</span>
                         <span style="color:var(--text-muted); font-size:12px;">No Active Zones</span>
                     </div>
                 `;
-                continue;
-            }
+                    continue;
+                }
 
-            // Show closest active zone
-            const zone = activeZones[0];
-            html += `
+                // Show closest active zone
+                const zone = activeZones[0];
+                html += `
                 <div class="proximity-row">
                     <div>
                         <span style="font-weight:600; margin-right:8px;">${sym}</span>
@@ -605,17 +976,17 @@
                     </div>
                 </div>
             `;
+            }
+            target.innerHTML = html || '<div style="color:var(--text-muted)">No active zones tracked.</div>';
         }
-        document.getElementById('proximityList').innerHTML = html || '<div style="color:var(--text-muted)">No active zones tracked.</div>';
-    }
 
-    function renderZonesTable() {
-        const zones = REPORT.active_zones || {};
-        let html = '';
+        function renderZonesTable() {
+            const zones = REPORT.active_zones || {};
+            let html = '';
 
-        for (const [sym, activeZones] of Object.entries(zones)) {
-            activeZones.forEach(z => {
-                html += `
+            for (const [sym, activeZones] of Object.entries(zones)) {
+                activeZones.forEach(z => {
+                    html += `
                     <tr>
                         <td style="font-weight:700;">${sym}</td>
                         <td class="mono">${z.id}</td>
@@ -625,23 +996,23 @@
                         <td><span style="color:var(--accent-emerald); font-weight:600;">ACTIVE</span></td>
                     </tr>
                 `;
-            });
+                });
+            }
+            document.getElementById('zonesTableBody').innerHTML = html || '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No active Supply/Demand zones.</td></tr>';
         }
-        document.getElementById('zonesTableBody').innerHTML = html || '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No active Supply/Demand zones.</td></tr>';
-    }
 
-    function renderRiskLogs() {
-        const logs = REPORT.risk_filter_logs || [];
-        let html = '';
+        function renderRiskLogs() {
+            const logs = REPORT.risk_filter_logs || [];
+            let html = '';
 
-        // Display in reverse order (newest/latest date first)
-        const sortedLogs = [...logs].reverse();
+            // Display in reverse order (newest/latest date first)
+            const sortedLogs = [...logs].reverse();
 
-        sortedLogs.forEach(l => {
-            const isApproved = l.status === "APPROVED";
-            const badgeCls = isApproved ? 'approved' : 'rejected';
-            
-            html += `
+            sortedLogs.forEach(l => {
+                const isApproved = l.status === "APPROVED";
+                const badgeCls = isApproved ? 'approved' : 'rejected';
+
+                html += `
                 <tr>
                     <td class="mono">${l.date}</td>
                     <td style="font-weight:700;">${l.symbol}</td>
@@ -653,18 +1024,18 @@
                     <td><span class="status-badge ${badgeCls}">${l.status}</span></td>
                 </tr>
             `;
-        });
-        document.getElementById('riskLogsTableBody').innerHTML = html || '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No signals processed.</td></tr>';
-    }
+            });
+            document.getElementById('riskLogsTableBody').innerHTML = html || '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No signals processed.</td></tr>';
+        }
 
-    function renderTradesTable() {
-        let html = '';
-        TRADES.forEach(t => {
-            const isWin = t.pnl >= 0;
-            const pnlColor = isWin ? 'var(--accent-emerald)' : 'var(--accent-rose)';
-            const spreadType = t.right === 'C' ? 'Bull Call' : 'Bear Put';
+        function renderTradesTable() {
+            let html = '';
+            TRADES.forEach(t => {
+                const isWin = t.pnl >= 0;
+                const pnlColor = isWin ? 'var(--accent-emerald)' : 'var(--accent-rose)';
+                const spreadType = t.right === 'C' ? 'Bull Call' : 'Bear Put';
 
-            html += `
+                html += `
                 <tr>
                     <td class="mono">${t.id}</td>
                     <td style="font-weight:700;">${t.symbol}</td>
@@ -674,66 +1045,298 @@
                     <td class="mono">${t.qty}</td>
                     <td class="mono">$${t.entry_price.toFixed(2)}</td>
                     <td class="mono">$${t.exit_price.toFixed(2)}</td>
-                    <td class="mono" style="color:${pnlColor}; font-weight:700;">${t.pnl >= 0 ? '+' : ''}$${t.pnl.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                    <td class="mono" style="color:${pnlColor}; font-weight:700;">${t.pnl >= 0 ? '+' : ''}$${t.pnl.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     <td class="mono" style="color:${pnlColor}; font-weight:600;">${t.pnl_pct >= 0 ? '+' : ''}${(t.pnl_pct * 100).toFixed(1)}%</td>
                     <td class="mono">${t.entry_date}</td>
                     <td class="mono">${t.exit_date}</td>
                     <td><span style="font-size:11px; font-weight:500;">${t.reason.replace('_', ' ').toUpperCase()}</span></td>
                 </tr>
             `;
-        });
-        document.getElementById('tradesTableBody').innerHTML = html || '<tr><td colspan="13" style="text-align:center; color:var(--text-muted);">No simulated trades resolved.</td></tr>';
-    }
+            });
+            document.getElementById('tradesTableBody').innerHTML = html || '<tr><td colspan="13" style="text-align:center; color:var(--text-muted);">No simulated trades resolved.</td></tr>';
+        }
 
-    function renderEquityChart() {
-        const ctx = document.getElementById('equityChart').getContext('2d');
-        const step = Math.max(1, Math.floor(EQUITY_CURVE.length / 500));
-        const sampled = EQUITY_CURVE.filter((_, i) => i % step === 0 || i === EQUITY_CURVE.length - 1);
+        function renderEquityChart() {
+            const ctx = document.getElementById('equityChart').getContext('2d');
+            const step = Math.max(1, Math.floor(EQUITY_CURVE.length / 500));
+            const sampled = EQUITY_CURVE.filter((_, i) => i % step === 0 || i === EQUITY_CURVE.length - 1);
 
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        const isProfit = REPORT.total_return_pct >= 0;
-        gradient.addColorStop(0, isProfit ? 'rgba(16,185,129,0.3)' : 'rgba(244,63,94,0.3)');
-        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            const isProfit = REPORT.total_return_pct >= 0;
+            gradient.addColorStop(0, isProfit ? 'rgba(16,185,129,0.3)' : 'rgba(244,63,94,0.3)');
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
 
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: sampled.map(d => d.date),
-                datasets: [{
-                    label: 'Portfolio Equity ($)',
-                    data: sampled.map(d => d.equity),
-                    borderColor: isProfit ? '#10b981' : '#f43f5e',
-                    backgroundColor: gradient,
-                    fill: true,
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    tension: 0.1
-                }, {
-                    label: 'Starting Capital',
-                    data: sampled.map(() => REPORT.starting_capital),
-                    borderColor: 'rgba(100,116,139,0.5)',
-                    borderDash: [5, 5],
-                    borderWidth: 1,
-                    pointRadius: 0,
-                    fill: false
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { intersect: false, mode: 'index' },
-                plugins: {
-                    legend: { labels: { color: '#94a3b8', font: { family: 'Inter', size: 12 } } }
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sampled.map(d => d.date),
+                    datasets: [{
+                        label: 'Portfolio Equity ($)',
+                        data: sampled.map(d => d.equity),
+                        borderColor: isProfit ? '#10b981' : '#f43f5e',
+                        backgroundColor: gradient,
+                        fill: true,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.1
+                    }, {
+                        label: 'Starting Capital',
+                        data: sampled.map(() => REPORT.starting_capital),
+                        borderColor: 'rgba(100,116,139,0.5)',
+                        borderDash: [5, 5],
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        fill: false
+                    }]
                 },
-                scales: {
-                    x: { ticks: { color: '#64748b', maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.03)' } },
-                    y: { ticks: { color: '#64748b', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: {
+                        legend: { labels: { color: '#94a3b8', font: { family: 'Inter', size: 12 } } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#64748b', maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                        y: { ticks: { color: '#64748b', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+        }
+
+        function renderSymbolsPerformance() {
+            const perSymbol = REPORT.per_symbol || {};
+            const symbolList = [];
+            for (const [sym, stats] of Object.entries(perSymbol)) {
+                symbolList.push({
+                    symbol: sym,
+                    trades: stats.trades || 0,
+                    wins: stats.wins || 0,
+                    win_rate: stats.win_rate || 0.0,
+                    pnl: stats.pnl || 0.0
+                });
+            }
+
+            // Sort by P&L descending (highest profit first)
+            symbolList.sort((a, b) => b.pnl - a.pnl);
+
+            // Render top profit and top loss leaders
+            if (symbolList.length > 0) {
+                const topProfit = symbolList[0];
+                const topLoss = symbolList[symbolList.length - 1];
+
+                if (topProfit && topProfit.pnl > 0) {
+                    document.getElementById('topProfitLeader').textContent = topProfit.symbol;
+                    document.getElementById('topProfitValue').textContent = `+$${topProfit.pnl.toLocaleString(undefined, { minimumFractionDigits: 2 })} P&L (${topProfit.trades} trades)`;
+                } else {
+                    document.getElementById('topProfitLeader').textContent = "None";
+                    document.getElementById('topProfitValue').textContent = "$0.00";
+                }
+
+                if (topLoss && topLoss.pnl < 0) {
+                    document.getElementById('topLossLeader').textContent = topLoss.symbol;
+                    document.getElementById('topLossValue').textContent = `-$${Math.abs(topLoss.pnl).toLocaleString(undefined, { minimumFractionDigits: 2 })} P&L (${topLoss.trades} trades)`;
+                } else {
+                    document.getElementById('topLossLeader').textContent = "None";
+                    document.getElementById('topLossValue').textContent = "$0.00";
                 }
             }
-        });
-    }
 
-    window.onload = loadData;
-</script>
+            let html = '';
+            symbolList.forEach((s, idx) => {
+                const rank = idx + 1;
+                const losses = s.trades - s.wins;
+                const pnlColor = s.pnl >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)';
+
+                // Performance badge / indicator
+                let indicator = '';
+                if (rank === 1 && s.pnl > 0) {
+                    indicator = '<span class="status-badge approved">🥇 TOP PROFIT</span>';
+                } else if (rank === symbolList.length && s.pnl < 0) {
+                    indicator = '<span class="status-badge rejected">💀 TOP LOSS</span>';
+                } else if (s.pnl > 0) {
+                    indicator = '<span class="status-badge approved">PROFITABLE</span>';
+                } else if (s.pnl < 0) {
+                    indicator = '<span class="status-badge rejected">UNPROFITABLE</span>';
+                } else {
+                    indicator = '<span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-secondary);">FLAT</span>';
+                }
+
+                html += `
+                <tr>
+                    <td class="mono" style="font-weight:600;">#${rank}</td>
+                    <td style="font-weight:700;">${s.symbol}</td>
+                    <td class="mono">${s.trades}</td>
+                    <td class="mono" style="color:var(--accent-emerald);">${s.wins}</td>
+                    <td class="mono" style="color:var(--accent-rose);">${losses}</td>
+                    <td class="mono">${s.win_rate.toFixed(1)}%</td>
+                    <td class="mono" style="color:${pnlColor}; font-weight:700;">${s.pnl >= 0 ? '+' : ''}$${s.pnl.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td>${indicator}</td>
+                </tr>
+            `;
+            });
+
+            document.getElementById('symbolsPerformanceTableBody').innerHTML = html || '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No symbol statistics available.</td></tr>';
+        }
+
+        function renderTopWinnersLosers() {
+            const perSymbol = REPORT.per_symbol || {};
+            const symbolList = [];
+            for (const [sym, stats] of Object.entries(perSymbol)) {
+                symbolList.push({
+                    symbol: sym,
+                    trades: stats.trades || 0,
+                    wins: stats.wins || 0,
+                    win_rate: stats.win_rate || 0.0,
+                    pnl: stats.pnl || 0.0
+                });
+            }
+
+            // Sort by PNL descending
+            const sorted = [...symbolList].sort((a, b) => b.pnl - a.pnl);
+
+            // Top 3 Winners (only those with positive PNL)
+            const winners = sorted.filter(s => s.pnl > 0).slice(0, 3);
+            // Top 3 Losers (only those with negative PNL)
+            const losers = [...sorted].reverse().filter(s => s.pnl < 0).slice(0, 3);
+
+            const winnersEl = document.getElementById('topWinnersList');
+            const losersEl = document.getElementById('topLosersList');
+
+            if (winnersEl) {
+                if (winners.length === 0) {
+                    winnersEl.innerHTML = '<div style="color:var(--text-muted); padding: 12px; text-align:center; font-size:13px;">No winning symbols in this period.</div>';
+                } else {
+                    winnersEl.innerHTML = winners.map((w, idx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px; background:rgba(16, 185, 129, 0.03); border: 1px solid rgba(16, 185, 129, 0.1); border-radius:var(--radius-sm);">
+                        <div>
+                            <span style="font-weight:700; color:var(--text-primary); font-size:13px; margin-right:8px;">#${idx + 1} ${w.symbol}</span>
+                            <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">
+                                ${w.trades} trades • <span style="color:var(--accent-emerald); font-weight:600;">${w.win_rate.toFixed(0)}% WR</span>
+                            </div>
+                        </div>
+                        <span style="font-family:'JetBrains Mono', monospace; font-weight:700; color:var(--accent-emerald); font-size:13px;">+$${w.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                `).join('');
+                }
+            }
+
+            if (losersEl) {
+                if (losers.length === 0) {
+                    losersEl.innerHTML = '<div style="color:var(--text-muted); padding: 12px; text-align:center; font-size:13px;">No losing symbols in this period.</div>';
+                } else {
+                    losersEl.innerHTML = losers.map((l, idx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px; background:rgba(244, 63, 94, 0.03); border: 1px solid rgba(244, 63, 94, 0.1); border-radius:var(--radius-sm);">
+                        <div>
+                            <span style="font-weight:700; color:var(--text-primary); font-size:13px; margin-right:8px;">#${idx + 1} ${l.symbol}</span>
+                            <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">
+                                ${l.trades} trades • <span style="color:var(--accent-rose); font-weight:600;">${l.win_rate.toFixed(0)}% WR</span>
+                            </div>
+                        </div>
+                        <span style="font-family:'JetBrains Mono', monospace; font-weight:700; color:var(--accent-rose); font-size:13px;">-$${Math.abs(l.pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                `).join('');
+                }
+            }
+        }
+
+        function renderInsights() {
+            if (!TRADES || TRADES.length === 0) return;
+
+            const wins = TRADES.filter(t => t.pnl > 0);
+            const losses = TRADES.filter(t => t.pnl <= 0);
+
+            // 1. Expectancy
+            const expectancyRatio = REPORT.avg_loss > 0 ? (REPORT.avg_win / REPORT.avg_loss) : 0;
+            document.getElementById('winExpectancyRatio').textContent = expectancyRatio > 0 ? expectancyRatio.toFixed(2) + 'x' : 'N/A';
+
+            const winRate = REPORT.winning_trades / REPORT.total_trades;
+            const lossRate = REPORT.losing_trades / REPORT.total_trades;
+            const profitExpectancy = (winRate * REPORT.avg_win) - (lossRate * REPORT.avg_loss);
+            document.getElementById('profitExpectancyVal').textContent = (profitExpectancy >= 0 ? '+' : '') + '$' + profitExpectancy.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            // 2. Directional performance
+            let bullTrades = 0, bullWins = 0, bullPnl = 0;
+            let bearTrades = 0, bearWins = 0, bearPnl = 0;
+
+            TRADES.forEach(t => {
+                const isBullish = t.long_strike < t.short_strike;
+                if (isBullish) {
+                    bullTrades++;
+                    bullPnl += t.pnl;
+                    if (t.pnl > 0) bullWins++;
+                } else {
+                    bearTrades++;
+                    bearPnl += t.pnl;
+                    if (t.pnl > 0) bearWins++;
+                }
+            });
+
+            const bullWr = bullTrades > 0 ? (bullWins / bullTrades) * 100 : 0;
+            const bearWr = bearTrades > 0 ? (bearWins / bearTrades) * 100 : 0;
+
+            document.getElementById('bullishPerformance').innerHTML = `
+            <span style="color:${bullPnl >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'}; font-weight:700;">${bullPnl >= 0 ? '+' : ''}$${bullPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span> 
+            <span style="color:var(--text-muted); font-size:11px;">(${bullTrades} trades • ${bullWr.toFixed(0)}% WR)</span>
+        `;
+            document.getElementById('bearishPerformance').innerHTML = `
+            <span style="color:${bearPnl >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'}; font-weight:700;">${bearPnl >= 0 ? '+' : ''}$${bearPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span> 
+            <span style="color:var(--text-muted); font-size:11px;">(${bearTrades} trades • ${bearWr.toFixed(0)}% WR)</span>
+        `;
+
+            // 3. Hold Times
+            const winHoldSum = wins.reduce((acc, t) => acc + (t.holding_days || 0), 0);
+            const lossHoldSum = losses.reduce((acc, t) => acc + (t.holding_days || 0), 0);
+            const avgWinHold = wins.length > 0 ? winHoldSum / wins.length : 0;
+            const avgLossHold = losses.length > 0 ? lossHoldSum / losses.length : 0;
+
+            document.getElementById('avgWinHoldDays').textContent = avgWinHold.toFixed(1) + ' days';
+            document.getElementById('avgLossHoldDays').textContent = avgLossHold.toFixed(1) + ' days';
+
+            // 4. IV Regimes (Proxied by High-Beta vs Low-Beta)
+            const HIGH_BETA = ['MELI', 'NVDA', 'AMD', 'TSLA', 'NFLX', 'QCOM', 'AMZN', 'META', 'DDOG', 'CRWD', 'ZS', 'PANW', 'ASML', 'DXCM'];
+            let hiBetaTrades = 0, hiBetaWins = 0, hiBetaPnl = 0;
+            let loBetaTrades = 0, loBetaWins = 0, loBetaPnl = 0;
+
+            TRADES.forEach(t => {
+                const isHighBeta = HIGH_BETA.includes(t.symbol);
+                if (isHighBeta) {
+                    hiBetaTrades++;
+                    hiBetaPnl += t.pnl;
+                    if (t.pnl > 0) hiBetaWins++;
+                } else {
+                    loBetaTrades++;
+                    loBetaPnl += t.pnl;
+                    if (t.pnl > 0) loBetaWins++;
+                }
+            });
+
+            const hiWr = hiBetaTrades > 0 ? (hiBetaWins / hiBetaTrades) * 100 : 0;
+            const loWr = loBetaTrades > 0 ? (loBetaWins / loBetaTrades) * 100 : 0;
+
+            document.getElementById('lowIVPerformance').innerHTML = `
+            <span style="color:${loBetaPnl >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'}; font-weight:700;">${loBetaPnl >= 0 ? '+' : ''}$${loBetaPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span> 
+            <span style="color:var(--text-muted); font-size:11px;">(${loBetaTrades} trades • ${loWr.toFixed(0)}% WR)</span>
+        `;
+            document.getElementById('highIVPerformance').innerHTML = `
+            <span style="color:${hiBetaPnl >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'}; font-weight:700;">${hiBetaPnl >= 0 ? '+' : ''}$${hiBetaPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span> 
+            <span style="color:var(--text-muted); font-size:11px;">(${hiBetaTrades} trades • ${hiWr.toFixed(0)}% WR)</span>
+        `;
+
+            // 5. Exit Reasons Breakdown
+            const exits = REPORT.exits_breakdown || {};
+            const stopLossCount = exits.stop_loss || 0;
+            const profitTargetCount = exits.profit_target || 0;
+            const timeExitCount = exits.time_exit || 0;
+            const totalExits = stopLossCount + profitTargetCount + timeExitCount || 1;
+
+            document.getElementById('tpExitCount').textContent = `${profitTargetCount} trades (${((profitTargetCount / totalExits) * 100).toFixed(1)}%)`;
+            document.getElementById('slExitCount').textContent = `${stopLossCount} trades (${((stopLossCount / totalExits) * 100).toFixed(1)}%)`;
+            document.getElementById('timeExitCount').textContent = `${timeExitCount} trades (${((timeExitCount / totalExits) * 100).toFixed(1)}%)`;
+        }
+
+        window.onload = loadData;
+    </script>
 </body>
+
 </html>
