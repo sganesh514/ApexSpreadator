@@ -62,6 +62,7 @@ def main():
     }
 
     all_dfs = []
+    failed_symbols = []
 
     for symbol in args.symbols:
         try:
@@ -109,13 +110,21 @@ def main():
             print(f"Completed {symbol}")
         except Exception as e:
             print(f"Error downloading {symbol}: {e}")
-            sys.exit(1)
+            failed_symbols.append(symbol)
+            continue
+
+    if failed_symbols:
+        print("\n⚠️ The following symbols failed to download and were skipped:")
+        print(f"  {', '.join(failed_symbols)}")
 
     if all_dfs:
         combined_df = pd.concat(all_dfs, ignore_index=True)
         combined_df = combined_df[["Date", "Symbol", "Open", "High", "Low", "Close", "Volume", "VIX", "IV"]]
         combined_df.to_csv("data/all_symbols_daily.csv", index=False)
-        print("\nAll downloads complete! Combined file saved to: data/all_symbols_daily.csv")
+        print(f"\nAll downloads complete! Combined file saved to: data/all_symbols_daily.csv ({len(all_dfs)} symbols succeeded)")
+    else:
+        print("\n❌ Error: No symbols were successfully downloaded.")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
