@@ -146,6 +146,23 @@ class TradeJournal:
         self._save()
         return entry
 
+    def log_weekly_summary(self, content: str) -> JournalEntry:
+        """Log a weekly summary/strategic analysis."""
+        entry = JournalEntry(
+            id=generate_id("JRN"),
+            timestamp=now_iso(),
+            trade_id="",
+            entry_type="weekly_summary",
+            symbol="",
+            content=content,
+            data={},
+        )
+
+        self._entries.append(entry)
+        self._save()
+        logger.info(f"📝 Journal weekly summary: {content[:100]}...")
+        return entry
+
     def get_recent_entries(self, count: int = 20) -> List[Dict[str, Any]]:
         """Get most recent journal entries for the dashboard."""
         return [e.to_dict() for e in self._entries[-count:]]
