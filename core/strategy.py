@@ -9,7 +9,7 @@ from models import Opportunity, Position, VerticalSpread, TradeStatus, ExitReaso
 from core.broker_base import BrokerBase
 from core.risk_manager import RiskManager
 from core.underlying_tracker import UnderlyingTracker
-from core.options_selector import OptionsSelector
+from core.options_selector import OptionsSelector, BrokerDataError
 from utils import get_logger, generate_id, now_iso, is_market_hours, format_currency, format_pnl
 
 logger = get_logger("Strategy")
@@ -92,17 +92,21 @@ class StrategyEngine:
             pass
 
         # Select option vertical spread and apply R:R check
-        spread, status = self.selector.select_spread(
-            symbol=symbol,
-            direction=direction,
-            underlying_price=current_price,
-            target_tp=target_tp,
-            target_sl=target_sl,
-            expiration=expiration_date,
-            dte=dte,
-            iv=iv_val,
-            options_chain=None  # Can be passed in live mode
-        )
+        try:
+            spread, status = self.selector.select_spread(
+                symbol=symbol,
+                direction=direction,
+                underlying_price=current_price,
+                target_tp=target_tp,
+                target_sl=target_sl,
+                expiration=expiration_date,
+                dte=dte,
+                iv=iv_val,
+                options_chain=None,  # Can be passed in live mode
+                is_backtesting=(self.broker is None)
+            )
+        except BrokerDataError as err:
+            spread, status = None, str(err)
 
         if not spread:
             logger.info(f"⚠️ [{symbol}] Retest signal at {current_price:.2f} did not result in an actionable spread: {status}")
@@ -133,6 +137,32 @@ class StrategyEngine:
         """
         symbol = opportunity.symbol
         spread = opportunity.spread
+
+        # Enforce 20-period EMA trend filter
+        tracker = self.get_tracker(symbol)
+        closes = [c["close"] for c in tracker.candles]
+        
+        if len(closes) < 10:
+            return False, "Not enough data for 10 EMA filter"
+            
+        # Calculate 10 EMA: SMA of first 10 as start, then smooth
+        ema_10 = sum(closes[:10]) / 10.0
+        alpha = 2.0 / (10 + 1)
+        for val in closes[10:]:
+            ema_10 = alpha * val + (1.0 - alpha) * ema_10
+            
+        current_price = closes[-1]
+        
+        if opportunity.direction == "BULLISH":
+            if current_price < ema_10:
+                msg = "Rejected: Bullish debit spread counter-trend (Price < 10 EMA)"
+                logger.info(msg)
+                return False, msg
+        elif opportunity.direction == "BEARISH":
+            if current_price > ema_10:
+                msg = "Rejected: Bearish debit spread counter-trend (Price > 10 EMA)"
+                logger.info(msg)
+                return False, msg
 
         # Check market hours (skip in backtest where broker is None)
         if self.broker is not None and not is_market_hours(self.config.schedule.market_open, self.config.schedule.market_close):
