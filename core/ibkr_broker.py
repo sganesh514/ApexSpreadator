@@ -40,7 +40,7 @@ class IBKRBroker(BrokerBase):
             self._ib.newOrderEvent += self._on_new_order
 
             logger.info(f"Connecting to IBKR at {self._host}:{self._port} (clientId={self._client_id})...")
-            self._ib.connect(self._host, self._port, clientId=self._client_id)
+            await self._ib.connectAsync(self._host, self._port, clientId=self._client_id)
 
             if self._ib.isConnected():
                 self._connected = True
