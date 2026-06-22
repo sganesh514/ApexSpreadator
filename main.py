@@ -429,7 +429,7 @@ class ApexSpreadatorAgent:
             return
 
         # Record P&L in risk manager
-        self.risk_manager.record_realized_pnl(trade_record.realized_pnl)
+        self.risk_manager.record_realized_pnl(trade_record.realized_pnl, self._account.equity)
 
         # Learning analysis
         analysis = self.learning.analyze_trade(trade_record)

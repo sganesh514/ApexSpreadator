@@ -65,8 +65,8 @@ class RiskConfig:
     max_risk_per_trade: float = 0.02      # 2% of account balance
     max_concurrent_positions: int = 4
     max_portfolio_risk: float = 0.20      # 20% total exposure
-    daily_loss_limit: float = 500.0       # $500
-    monthly_drawdown_limit: float = 2000.0  # $2,000
+    daily_loss_limit_pct: float = 0.05    # 5% daily equity limit
+    monthly_drawdown_limit_pct: float = 0.15  # 15% monthly drawdown limit
     max_correlated_positions: int = 2
 
 

@@ -180,8 +180,16 @@ class StrategyEngine:
 
         # Run risk manager checks if present
         if self.risk is not None:
-            # Re-map vertical spread checks if needed
-            pass
+            passed, reason = self.risk.pre_trade_check(spread, account, open_positions)
+            if not passed:
+                return False, reason
+
+        # Check if account has enough equity to execute minimum contract size safely
+        qty = self.calculate_position_size(spread, account)
+        if qty <= 0:
+            msg = "Rejected: Account equity insufficient to execute minimum contract size safely."
+            logger.info(msg)
+            return False, msg
 
         logger.info(f"✅ Entry approved for {spread.description} | Opportunity R:R {spread.rr_ratio:.2f}")
         return True, "All checks passed"
@@ -198,7 +206,16 @@ class StrategyEngine:
             return 1
 
         contracts = int(allowed_portfolio_loss / max_loss_per_contract)
-        return max(1, contracts)
+        
+        if contracts == 0:
+            current_equity = account.equity or account.balance or self.config.account.starting_capital
+            absolute_ceiling = current_equity * 0.035
+            if max_loss_per_contract <= absolute_ceiling:
+                return 1
+            else:
+                return 0
+                
+        return contracts
 
     def check_exit_conditions(
         self,
