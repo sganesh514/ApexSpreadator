@@ -31,6 +31,11 @@ class StrategyConfig:
     # Watchlist
     underlyings: List[str] = field(default_factory=lambda: ["SPY", "QQQ"])
 
+    # Dynamic Screener settings
+    screener_type: str = "static"          # "static", "sp500", or "nasdaq100"
+    screener_limit: int = 5                # Number of top dynamic candidates to track
+    screener_min_volume: int = 500000      # Minimum average volume (shares)
+
     # Timeframe and DTE selection mapping (timeframe -> option DTE)
     timeframe_dte_map: Dict[str, int] = field(default_factory=lambda: {
         "1d": 30,     # Daily chart -> 30 DTE
