@@ -101,6 +101,11 @@ class OptionsBacktester:
         
         # Initialize strategy in backtest mode
         self.strategy = StrategyEngine(broker=None, config=CONFIG, risk_manager=None)
+        
+        # Initialize screener for dynamic watchlist simulation
+        from core.screener import ScreenerEngine
+        self.screener = ScreenerEngine(CONFIG)
+
 
     def run_backtest(self, df_data: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -221,11 +226,23 @@ class OptionsBacktester:
             if len(self.positions) < config.get("max_concurrent_positions", 4):
                 held_symbols = {p.spread.symbol for p in self.positions if p.spread}
 
-                for sym in symbols:
+                # Determine active watchlist for today via historical screening
+                screener_type = getattr(CONFIG.strategy, "screener_type", "static")
+                if screener_type != "static":
+                    # Screen the symbols available in the historical dataset up to this date
+                    active_watchlist = self.screener.get_candidate_list(
+                        historical_df=df_data,
+                        date_limit=date_str
+                    )
+                else:
+                    active_watchlist = list(symbols)
+
+                for sym in active_watchlist:
                     if sym in held_symbols:
                         continue
                     if len(self.positions) >= config.get("max_concurrent_positions", 4):
                         break
+
 
                     rec = lookup.get(sym, {}).get(date_str)
                     if not rec:
