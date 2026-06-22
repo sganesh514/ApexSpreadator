@@ -236,7 +236,8 @@ class OptionsBacktester:
                 if self._last_screen_time is None or (current_sim_time - self._last_screen_time) >= timedelta(minutes=30):
                     self._last_screen_time = current_sim_time
                     # Get new candidates using the simulation timestamp
-                    self.active_watchlist = self.screener.get_candidate_list(current_time=current_sim_time)
+                    sim_date = date_str
+                    self.active_watchlist = self.screener.get_candidate_list(current_time=sim_date)
             else:
                 self.active_watchlist = list(symbols)
 

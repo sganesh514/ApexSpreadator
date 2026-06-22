@@ -181,7 +181,8 @@ class ApexSpreadatorAgent:
                                     if new_symbols:
                                         logger.info(f"Seeding historical candles for newly screened symbols: {', '.join(new_symbols)}")
                                         for symbol in new_symbols:
-                                            await self._seed_single_symbol(symbol)
+                                            # Run asynchronously without blocking the main loop's processing interval
+                                            asyncio.create_task(self._seed_single_symbol(symbol))
                                 else:
                                     logger.warning("Screener returned no volatile assets. Watchlist unchanged.")
                             except Exception as screener_err:
@@ -212,8 +213,12 @@ class ApexSpreadatorAgent:
         try:
             end_dt = datetime.now()
             start_dt = end_dt - timedelta(days=60)
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(start=start_dt.strftime("%Y-%m-%d"), end=end_dt.strftime("%Y-%m-%d"), interval="1d")
+            
+            def fetch_data():
+                ticker = yf.Ticker(symbol)
+                return ticker.history(start=start_dt.strftime("%Y-%m-%d"), end=end_dt.strftime("%Y-%m-%d"), interval="1d")
+                
+            df = await asyncio.to_thread(fetch_data)
             if df.empty:
                 logger.warning(f"No historical data seeded for {symbol}")
                 return
@@ -238,13 +243,13 @@ class ApexSpreadatorAgent:
                 )
             logger.info(f"✅ Seeded {len(tracker.candles)} candles for {symbol}. Bias: {tracker.bias}")
         except Exception as e:
-            logger.error(f"Error seeding historical candles for {symbol}: {e}")
+            logger.error(f"Error seeding historical candles for {symbol}: {e}", exc_info=True)
 
     async def _seed_historical_candles(self):
         """Fetch past 60 days of daily historical candles from yfinance to build zones and bias for watchlist."""
         logger.info("Seeding historical candles for watchlist symbols...")
-        for symbol in self.config.strategy.underlyings:
-            await self._seed_single_symbol(symbol)
+        tasks = [self._seed_single_symbol(symbol) for symbol in self.config.strategy.underlyings]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _run_scan(self):
         """Execute a single scan cycle by fetching the latest daily bars and feeding them to trackers."""
