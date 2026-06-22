@@ -125,9 +125,10 @@ class LearningEngine:
         overall_win_rate = safe_divide(total_wins, total_trades, 0.5)
 
         if overall_win_rate < 0.50:
-            self.state.adjusted_entry_threshold = min(90, self.state.adjusted_entry_threshold + 3)
+            self.state.adjusted_entry_threshold = min(75, self.state.adjusted_entry_threshold + 3)
         elif overall_win_rate > 0.70:
             self.state.adjusted_entry_threshold = max(60, self.state.adjusted_entry_threshold - 2)
+
 
         new_values = {
             "entry_threshold": self.state.adjusted_entry_threshold,

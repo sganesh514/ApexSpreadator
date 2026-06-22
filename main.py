@@ -161,9 +161,10 @@ class ApexSpreadatorAgent:
                         scan_counter = 0
 
                         # Check if we should update watchlist (every 30 minutes)
-                        now = datetime.now()
-                        if self._last_screen_time is None or (now - self._last_screen_time) >= timedelta(minutes=30):
-                            self._last_screen_time = now
+                        current_sim_time = datetime.now()
+                        if self._last_screen_time is None or (current_sim_time - self._last_screen_time) >= timedelta(minutes=30):
+                            self._last_screen_time = current_sim_time
+
                             logger.info("Running ScreenerEngine to dynamically update watchlist...")
                             try:
                                 candidates = screener.get_candidate_list()

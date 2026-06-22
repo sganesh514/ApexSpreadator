@@ -2,12 +2,14 @@
 ApexSpreadator — Stock Screener Engine
 Dynamically screens for high-volatility, liquid underlying assets to populate the bot's watchlist.
 """
+import os
 import math
 from typing import List, Optional, Dict, Any
 import pandas as pd
 import yfinance as yf
 from config import AgentConfig
 from utils import get_logger
+
 
 logger = get_logger("Screener")
 
@@ -63,6 +65,7 @@ class ScreenerEngine:
 
     def get_candidate_list(
         self,
+        current_time: Optional[Any] = None,
         limit: int = 5,
         historical_df: Optional[Any] = None,
         date_limit: Optional[str] = None
@@ -74,10 +77,74 @@ class ScreenerEngine:
         # Resolve limit and min_volume from config
         strategy_config = getattr(self.config, "strategy", None)
         config_limit = getattr(strategy_config, "screener_limit", 5) if strategy_config else 5
-        # If limit is 5 (default), but config says something else, use config_limit
         effective_limit = limit if limit != 5 else config_limit
         min_volume = getattr(strategy_config, "screener_min_volume", 500000) if strategy_config else 500000
 
+        # If current_time is provided, we are in Backtest/Historical Mode
+        if current_time is not None:
+            if isinstance(current_time, str):
+                date_str = current_time
+            else:
+                date_str = current_time.strftime("%Y-%m-%d")
+
+            # Use historical_df if passed, otherwise load from the csv archive
+            df = historical_df
+            if df is None:
+                archive_path = "data/all_symbols_daily.csv"
+                if os.path.exists(archive_path):
+                    if not hasattr(self, "_cached_archive_df") or self._cached_archive_df is None:
+                        try:
+                            self._cached_archive_df = pd.read_csv(archive_path)
+                            self._cached_archive_df["Date"] = pd.to_datetime(self._cached_archive_df["Date"]).dt.strftime("%Y-%m-%d")
+                        except Exception as e:
+                            logger.error(f"Failed to load backtest data archive: {e}")
+                            return []
+                    df = self._cached_archive_df
+                else:
+                    logger.error(f"Historical data archive {archive_path} not found.")
+                    return []
+
+            logger.info(f"Screening historical data ending at {date_str}...")
+            try:
+                # Filter by date
+                df_filtered = df[df["Date"] <= date_str]
+                symbols = df_filtered["Symbol"].unique()
+                vol_scores = []
+                
+                for symbol in symbols:
+                    # Get last 5 days of data for this symbol
+                    symbol_df = df_filtered[df_filtered["Symbol"] == symbol].sort_values("Date").tail(5)
+                    
+                    if len(symbol_df) < 3:
+                        continue
+
+                    # Volatility Metric: Average daily range percent
+                    daily_ranges = (symbol_df["High"] - symbol_df["Low"]) / symbol_df["Close"]
+                    avg_range_pct = daily_ranges.mean()
+
+                    # Liquidity check
+                    avg_volume = symbol_df["Volume"].mean()
+                    if avg_volume < min_volume:
+                        continue
+
+                    vol_scores.append((symbol, avg_range_pct))
+
+                vol_scores.sort(key=lambda x: x[1], reverse=True)
+                candidates = [x[0] for x in vol_scores[:effective_limit]]
+                
+                # Protect anchor symbols
+                anchors = ["SPY", "QQQ"]
+                for anchor in anchors:
+                    if anchor not in candidates:
+                        candidates.append(anchor)
+
+                logger.info(f"Top historical volatility candidates found: {candidates}")
+                return candidates
+            except Exception as err:
+                logger.error(f"Failed to execute historical screening: {err}")
+                return []
+
+        # If historical_df is passed but current_time is None (legacy support)
         if historical_df is not None:
             logger.info(f"Screening historical data ending at {date_limit or 'latest'}...")
             try:
@@ -89,17 +156,13 @@ class ScreenerEngine:
                 vol_scores = []
                 
                 for symbol in symbols:
-                    # Get last 5 days of data for this symbol
                     symbol_df = df[df["Symbol"] == symbol].sort_values("Date").tail(5)
-                    
                     if len(symbol_df) < 3:
                         continue
 
-                    # Volatility Metric: Average daily range percent
                     daily_ranges = (symbol_df["High"] - symbol_df["Low"]) / symbol_df["Close"]
                     avg_range_pct = daily_ranges.mean()
 
-                    # Liquidity check: Average daily volume > min_volume shares
                     avg_volume = symbol_df["Volume"].mean()
                     if avg_volume < min_volume:
                         continue
@@ -108,6 +171,13 @@ class ScreenerEngine:
 
                 vol_scores.sort(key=lambda x: x[1], reverse=True)
                 candidates = [x[0] for x in vol_scores[:effective_limit]]
+                
+                # Protect anchor symbols
+                anchors = ["SPY", "QQQ"]
+                for anchor in anchors:
+                    if anchor not in candidates:
+                        candidates.append(anchor)
+
                 logger.info(f"Top historical volatility candidates found: {candidates}")
                 return candidates
             except Exception as err:
@@ -178,9 +248,17 @@ class ScreenerEngine:
             # Sort by daily range percent descending
             vol_scores.sort(key=lambda x: x[1], reverse=True)
             candidates = [x[0] for x in vol_scores[:effective_limit]]
+            
+            # Protect anchor symbols
+            anchors = ["SPY", "QQQ"]
+            for anchor in anchors:
+                if anchor not in candidates:
+                    candidates.append(anchor)
+
             logger.info(f"Top volatility candidates found: {candidates}")
         except Exception as err:
             logger.error(f"Failed to execute screening cycle: {err}")
             
         return candidates
+
 

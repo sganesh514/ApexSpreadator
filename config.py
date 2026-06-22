@@ -32,7 +32,8 @@ class StrategyConfig:
     underlyings: List[str] = field(default_factory=lambda: ["SPY", "QQQ"])
 
     # Dynamic Screener settings
-    screener_type: str = "nasdaq100"       # "static", "sp500", or "nasdaq100"
+    screener_type: str = "static"          # "static", "sp500", or "nasdaq100"
+
 
     screener_limit: int = 5                # Number of top dynamic candidates to track
     screener_min_volume: int = 500000      # Minimum average volume (shares)
