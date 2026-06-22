@@ -6,9 +6,11 @@ import os
 import math
 from typing import List, Optional, Dict, Any
 import pandas as pd
-import yfinance as yf
 from config import AgentConfig
 from utils import get_logger
+from core.data_loader import get_market_history
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 
 
 logger = get_logger("Screener")
@@ -204,47 +206,50 @@ class ScreenerEngine:
         candidates = []
         
         try:
-            # We download in chunks to avoid yfinance query size limits / timeouts
-            chunk_size = 50
-            chunks = [pool[i:i + chunk_size] for i in range(0, len(pool), chunk_size)]
+            # We fetch candidates in parallel using ThreadPoolExecutor
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(days=10) # 10 days to guarantee at least 5 trading days
+            start_date = start_dt.strftime("%Y-%m-%d")
+            end_date = end_dt.strftime("%Y-%m-%d")
             
-            vol_scores = []
-            for chunk in chunks:
-                symbols_str = " ".join(chunk)
+            def fetch_symbol_score(symbol):
                 try:
-                    data = yf.download(symbols_str, period="5d", interval="1d", group_by="ticker", progress=False)
-                    if data.empty:
-                        continue
+                    df = get_market_history(
+                        symbol=symbol,
+                        timeframe="1d",
+                        start_date=start_date,
+                        end_date=end_date,
+                        mode="LIVE"
+                    )
+                    if df.empty:
+                        return None
+                        
+                    df = df.dropna(subset=["Open", "High", "Low", "Close", "Volume"])
+                    if len(df) < 3:
+                        return None
+                        
+                    # Volatility Metric: Average daily range percent
+                    daily_ranges = (df["High"] - df["Low"]) / df["Close"]
+                    avg_range_pct = daily_ranges.mean()
+                    
+                    # Liquidity check
+                    avg_volume = df["Volume"].mean()
+                    if avg_volume < min_volume:
+                        return None
+                        
+                    return symbol, avg_range_pct
+                except Exception as sym_err:
+                    logger.debug(f"Skipping {symbol} in screening due to error: {sym_err}")
+                    return None
 
-                    for symbol in chunk:
-                        try:
-                            # Handle batch df structure
-                            if symbol in data:
-                                df = data[symbol]
-                            else:
-                                continue
-                            
-                            df = df.dropna(subset=["Open", "High", "Low", "Close", "Volume"])
-                            if len(df) < 3:
-                                continue
-
-                            # Volatility Metric: Average daily range percent
-                            daily_ranges = (df["High"] - df["Low"]) / df["Close"]
-                            avg_range_pct = daily_ranges.mean()
-
-                            # Liquidity check
-                            avg_volume = df["Volume"].mean()
-                            if avg_volume < min_volume:
-                                continue
-
-                            vol_scores.append((symbol, avg_range_pct))
-                        except Exception as sym_err:
-                            logger.debug(f"Skipping {symbol} in screening due to error: {sym_err}")
-                            continue
-                except Exception as chunk_err:
-                    logger.error(f"Failed to execute batch download for chunk: {chunk_err}")
-                    continue
-
+            vol_scores = []
+            max_workers = min(10, len(pool))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                results = executor.map(fetch_symbol_score, pool)
+                for res in results:
+                    if res is not None:
+                        vol_scores.append(res)
+                        
             # Sort by daily range percent descending
             vol_scores.sort(key=lambda x: x[1], reverse=True)
             candidates = [x[0] for x in vol_scores[:effective_limit]]

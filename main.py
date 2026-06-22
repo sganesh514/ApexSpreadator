@@ -2,6 +2,7 @@
 ApexSpreadator Agent — Main Entry Point
 Starts the trading agent loop and web dashboard.
 """
+from core.moomoo_broker import MoomooBroker
 import asyncio
 import signal
 import sys
@@ -9,15 +10,15 @@ import os
 import threading
 from datetime import datetime, timedelta
 import pandas as pd
-import yfinance as yf
 import uvicorn
+from core.data_loader import get_market_history
 
 from config import CONFIG, AgentConfig
 from models import (
     AgentState, TradeStatus, ExitReason,
     AccountSnapshot, ScannerStatus
 )
-from core.ibkr_broker import IBKRBroker
+from core.moomoo_broker import MoomooBroker
 from core.strategy import StrategyEngine
 from core.execution import ExecutionEngine
 from core.position_manager import PositionManager
@@ -46,7 +47,7 @@ class ApexSpreadatorAgent:
         self._paused = False
 
         # Initialize components
-        self.broker = IBKRBroker(
+        self.broker = MoomooBroker(
             host=self.config.connection.host,
             port=self.config.connection.port,
             client_id=self.config.connection.client_id,
@@ -104,7 +105,7 @@ class ApexSpreadatorAgent:
         # Initial screen to populate dynamic watchlist on startup
         logger.info("Running initial ScreenerEngine watchlist population...")
         try:
-            candidates = screener.get_candidate_list()
+            candidates = await asyncio.to_thread(screener.get_candidate_list)
             if candidates:
                 self.config.strategy.underlyings = candidates
                 logger.info(f"Watchlist initialized with volatile assets: {', '.join(candidates)}")
@@ -167,7 +168,7 @@ class ApexSpreadatorAgent:
 
                             logger.info("Running ScreenerEngine to dynamically update watchlist...")
                             try:
-                                candidates = screener.get_candidate_list()
+                                candidates = await asyncio.to_thread(screener.get_candidate_list)
                                 if candidates:
                                     # Identify any new symbols that were not in our watchlist previously
                                     current_watchlist = set(self.config.strategy.underlyings)
@@ -209,21 +210,25 @@ class ApexSpreadatorAgent:
         await self._shutdown()
 
     async def _seed_single_symbol(self, symbol: str):
-        """Fetch past 60 days of daily historical candles from yfinance for a single symbol to build zones and bias."""
+        """Fetch past 60 days of daily historical candles from Moomoo for a single symbol to build zones and bias."""
         try:
             end_dt = datetime.now()
             start_dt = end_dt - timedelta(days=60)
             
             def fetch_data():
-                ticker = yf.Ticker(symbol)
-                return ticker.history(start=start_dt.strftime("%Y-%m-%d"), end=end_dt.strftime("%Y-%m-%d"), interval="1d")
+                return get_market_history(
+                    symbol=symbol,
+                    timeframe="1d",
+                    start_date=start_dt.strftime("%Y-%m-%d"),
+                    end_date=end_dt.strftime("%Y-%m-%d"),
+                    mode="LIVE"
+                )
                 
             df = await asyncio.to_thread(fetch_data)
             if df.empty:
                 logger.warning(f"No historical data seeded for {symbol}")
                 return
             
-            df = df.reset_index()
             tracker = self.strategy.get_tracker(symbol)
             
             for _, row in df.iterrows():
@@ -246,7 +251,7 @@ class ApexSpreadatorAgent:
             logger.error(f"Error seeding historical candles for {symbol}: {e}", exc_info=True)
 
     async def _seed_historical_candles(self):
-        """Fetch past 60 days of daily historical candles from yfinance to build zones and bias for watchlist."""
+        """Fetch past 60 days of daily historical candles from Moomoo to build zones and bias for watchlist."""
         logger.info("Seeding historical candles for watchlist symbols...")
         tasks = [self._seed_single_symbol(symbol) for symbol in self.config.strategy.underlyings]
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -261,9 +266,19 @@ class ApexSpreadatorAgent:
             await self._refresh_account()
 
             for symbol in self.config.strategy.underlyings:
-                ticker = yf.Ticker(symbol)
-                # Fetch latest 5 days to ensure we get the latest daily candle
-                df = ticker.history(period="5d", interval="1d").reset_index()
+                end_dt = datetime.now()
+                start_dt = end_dt - timedelta(days=10)  # 10 days to guarantee enough candles
+                
+                def fetch_data():
+                    return get_market_history(
+                        symbol=symbol,
+                        timeframe="1d",
+                        start_date=start_dt.strftime("%Y-%m-%d"),
+                        end_date=end_dt.strftime("%Y-%m-%d"),
+                        mode="LIVE"
+                    )
+                    
+                df = await asyncio.to_thread(fetch_data)
                 if df.empty:
                     continue
                 

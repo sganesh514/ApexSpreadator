@@ -48,6 +48,11 @@ class OptionsSelector:
         logger.info(f"🔍 [{symbol}] Selecting {direction} spread. Underlying: {underlying_price:.2f} | "
                     f"Target TP: {target_tp:.2f} | Target SL: {target_sl:.2f} | DTE: {dte} | IV: {iv*100:.1f}%")
 
+        # Convert pandas DataFrame to list of dicts if needed
+        import pandas as pd
+        if isinstance(options_chain, pd.DataFrame):
+            options_chain = options_chain.to_dict(orient="records")
+
         # ── 1. Strike Selection & Option Chain Validation ────────────
         if not options_chain:
             if is_backtesting:
