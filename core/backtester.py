@@ -101,6 +101,11 @@ class OptionsBacktester:
         
         # Initialize strategy in backtest mode
         self.strategy = StrategyEngine(broker=None, config=CONFIG, risk_manager=None)
+        
+        # Initialize screener for dynamic watchlist simulation
+        from core.screener import ScreenerEngine
+        self.screener = ScreenerEngine(CONFIG)
+
 
     def run_backtest(self, df_data: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -120,6 +125,10 @@ class OptionsBacktester:
         df_data = df_data.sort_values("Date")
         dates = df_data["Date"].unique()
         symbols = df_data["Symbol"].unique()
+        
+        self._last_screen_time = None
+        self.active_watchlist = list(symbols)
+
         
         # Build lookup table for rapid row access
         lookup: Dict[str, Dict[str, Dict[str, Any]]] = {s: {} for s in symbols}
@@ -218,31 +227,51 @@ class OptionsBacktester:
             self.positions = active_positions
 
             # ── 2. Scan for new entries via Strategy Engine ──
+            # First, update watchlist rotation interval logic
+            screener_type = getattr(CONFIG.strategy, "screener_type", "static")
+            if screener_type != "static":
+                from datetime import datetime, timedelta
+                current_sim_time = datetime.strptime(date_str, "%Y-%m-%d")
+                
+                if self._last_screen_time is None or (current_sim_time - self._last_screen_time) >= timedelta(minutes=30):
+                    self._last_screen_time = current_sim_time
+                    # Get new candidates using the simulation timestamp
+                    sim_date = date_str
+                    self.active_watchlist = self.screener.get_candidate_list(current_time=sim_date)
+            else:
+                self.active_watchlist = list(symbols)
+
+            # Feed daily bars to ALL trackers to build zone history and indicators
+            opportunities = {}
+            for sym in symbols:
+                rec = lookup.get(sym, {}).get(date_str)
+                if not rec:
+                    continue
+
+                opp = self.strategy.add_bar(
+                    symbol=sym,
+                    open_p=rec["open"],
+                    high_p=rec["high"],
+                    low_p=rec["low"],
+                    close_p=rec["close"],
+                    volume=rec["volume"],
+                    timestamp=date_str,
+                    iv=rec["iv"]
+                )
+                if opp:
+                    opportunities[sym] = opp
+
+            # Then, scan for new entries only on symbols in the active watchlist
             if len(self.positions) < config.get("max_concurrent_positions", 4):
                 held_symbols = {p.spread.symbol for p in self.positions if p.spread}
 
-                for sym in symbols:
+                for sym in self.active_watchlist:
                     if sym in held_symbols:
                         continue
                     if len(self.positions) >= config.get("max_concurrent_positions", 4):
                         break
 
-                    rec = lookup.get(sym, {}).get(date_str)
-                    if not rec:
-                        continue
-
-                    # Feed bar into the strategy engine
-                    opp = self.strategy.add_bar(
-                        symbol=sym,
-                        open_p=rec["open"],
-                        high_p=rec["high"],
-                        low_p=rec["low"],
-                        close_p=rec["close"],
-                        volume=rec["volume"],
-                        timestamp=date_str,
-                        iv=rec["iv"]
-                    )
-
+                    opp = opportunities.get(sym)
                     if opp:
                         # Retest detected and options selection approved. Check portfolio limits
                         should_enter, reason = self.strategy.should_enter(opp, current_snapshot, self.positions)
@@ -269,6 +298,7 @@ class OptionsBacktester:
                                 )
                                 self.positions.append(new_pos)
                                 logger.info(f"📥 [{sym}] Entered Vertical Spread at {date_str} x{qty} spreads. Debit: ${opp.spread.net_debit:.2f} per spread.")
+
 
             # ── 3. End-of-day equity calculation ──
             pos_value = sum(p.current_value * p.quantity * 100.0 for p in self.positions)

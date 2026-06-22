@@ -22,6 +22,7 @@ from core.strategy import StrategyEngine
 from core.execution import ExecutionEngine
 from core.position_manager import PositionManager
 from core.risk_manager import RiskManager
+from core.screener import ScreenerEngine
 from intelligence.learning import LearningEngine
 from intelligence.ollama_analyst import OllamaAnalyst
 from intelligence.journal import TradeJournal
@@ -96,6 +97,22 @@ class ApexSpreadatorAgent:
         # Check Ollama availability
         await self.analyst.check_availability()
 
+        # Initialize screener
+        screener = ScreenerEngine(self.config)
+        self._last_screen_time = datetime.now()
+
+        # Initial screen to populate dynamic watchlist on startup
+        logger.info("Running initial ScreenerEngine watchlist population...")
+        try:
+            candidates = screener.get_candidate_list()
+            if candidates:
+                self.config.strategy.underlyings = candidates
+                logger.info(f"Watchlist initialized with volatile assets: {', '.join(candidates)}")
+            else:
+                logger.warning("Screener returned empty list on startup. Using default watchlist.")
+        except Exception as screener_err:
+            logger.error(f"Failed initial watchlist screening: {screener_err}")
+
         # Seed historical candles for the watchlist to build initial market structure
         await self._seed_historical_candles()
 
@@ -142,6 +159,35 @@ class ApexSpreadatorAgent:
                     scan_counter += 1
                     if scan_counter >= (self.config.schedule.scan_interval_seconds // 5):
                         scan_counter = 0
+
+                        # Check if we should update watchlist (every 30 minutes)
+                        current_sim_time = datetime.now()
+                        if self._last_screen_time is None or (current_sim_time - self._last_screen_time) >= timedelta(minutes=30):
+                            self._last_screen_time = current_sim_time
+
+                            logger.info("Running ScreenerEngine to dynamically update watchlist...")
+                            try:
+                                candidates = screener.get_candidate_list()
+                                if candidates:
+                                    # Identify any new symbols that were not in our watchlist previously
+                                    current_watchlist = set(self.config.strategy.underlyings)
+                                    new_symbols = [s for s in candidates if s not in current_watchlist]
+                                    
+                                    # Dynamically update the watchlist
+                                    self.config.strategy.underlyings = candidates
+                                    logger.info(f"Screener updated watchlist to: {', '.join(candidates)}")
+                                    
+                                    # Seed historical candles for any new symbols
+                                    if new_symbols:
+                                        logger.info(f"Seeding historical candles for newly screened symbols: {', '.join(new_symbols)}")
+                                        for symbol in new_symbols:
+                                            # Run asynchronously without blocking the main loop's processing interval
+                                            asyncio.create_task(self._seed_single_symbol(symbol))
+                                else:
+                                    logger.warning("Screener returned no volatile assets. Watchlist unchanged.")
+                            except Exception as screener_err:
+                                logger.error(f"Error running ScreenerEngine: {screener_err}", exc_info=True)
+
                         await self._run_scan()
 
                     # Broadcast updates to dashboard
@@ -162,41 +208,48 @@ class ApexSpreadatorAgent:
 
         await self._shutdown()
 
-    async def _seed_historical_candles(self):
-        """Fetch past 30 days of daily historical candles from yfinance to build zones and bias."""
-        logger.info("Seeding historical candles for watchlist symbols...")
-        end_dt = datetime.now()
-        start_dt = end_dt - timedelta(days=60)
-        
-        for symbol in self.config.strategy.underlyings:
-            try:
+    async def _seed_single_symbol(self, symbol: str):
+        """Fetch past 60 days of daily historical candles from yfinance for a single symbol to build zones and bias."""
+        try:
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(days=60)
+            
+            def fetch_data():
                 ticker = yf.Ticker(symbol)
-                df = ticker.history(start=start_dt.strftime("%Y-%m-%d"), end=end_dt.strftime("%Y-%m-%d"), interval="1d")
-                if df.empty:
-                    logger.warning(f"No historical data seeded for {symbol}")
+                return ticker.history(start=start_dt.strftime("%Y-%m-%d"), end=end_dt.strftime("%Y-%m-%d"), interval="1d")
+                
+            df = await asyncio.to_thread(fetch_data)
+            if df.empty:
+                logger.warning(f"No historical data seeded for {symbol}")
+                return
+            
+            df = df.reset_index()
+            tracker = self.strategy.get_tracker(symbol)
+            
+            for _, row in df.iterrows():
+                timestamp = row["Date"].strftime("%Y-%m-%d")
+                # Check if already in tracker
+                if tracker.candles and tracker.candles[-1]["time"] >= timestamp:
                     continue
                 
-                df = df.reset_index()
-                tracker = self.strategy.get_tracker(symbol)
-                
-                for _, row in df.iterrows():
-                    timestamp = row["Date"].strftime("%Y-%m-%d")
-                    # Check if already in tracker
-                    if tracker.candles and tracker.candles[-1]["time"] >= timestamp:
-                        continue
-                    
-                    tracker.add_candle(
-                        open_p=row["Open"],
-                        high_p=row["High"],
-                        low_p=row["Low"],
-                        close_p=row["Close"],
-                        volume=row["Volume"],
-                        timestamp=timestamp,
-                        iv=0.18
-                    )
-                logger.info(f"✅ Seeded {len(tracker.candles)} candles for {symbol}. Bias: {tracker.bias}")
-            except Exception as e:
-                logger.error(f"Error seeding historical candles for {symbol}: {e}")
+                tracker.add_candle(
+                    open_p=row["Open"],
+                    high_p=row["High"],
+                    low_p=row["Low"],
+                    close_p=row["Close"],
+                    volume=row["Volume"],
+                    timestamp=timestamp,
+                    iv=0.18
+                )
+            logger.info(f"✅ Seeded {len(tracker.candles)} candles for {symbol}. Bias: {tracker.bias}")
+        except Exception as e:
+            logger.error(f"Error seeding historical candles for {symbol}: {e}", exc_info=True)
+
+    async def _seed_historical_candles(self):
+        """Fetch past 60 days of daily historical candles from yfinance to build zones and bias for watchlist."""
+        logger.info("Seeding historical candles for watchlist symbols...")
+        tasks = [self._seed_single_symbol(symbol) for symbol in self.config.strategy.underlyings]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _run_scan(self):
         """Execute a single scan cycle by fetching the latest daily bars and feeding them to trackers."""
@@ -376,7 +429,7 @@ class ApexSpreadatorAgent:
             return
 
         # Record P&L in risk manager
-        self.risk_manager.record_realized_pnl(trade_record.realized_pnl)
+        self.risk_manager.record_realized_pnl(trade_record.realized_pnl, self._account.equity)
 
         # Learning analysis
         analysis = self.learning.analyze_trade(trade_record)

@@ -37,6 +37,8 @@ class RiskManager:
         self._circuit_breaker_active: bool = False
         self._circuit_breaker_reason: str = ""
         self._current_date: str = ""
+        self._day_start_equity: Optional[float] = None
+        self._month_start_equity: Optional[float] = None
 
     def pre_trade_check(
         self,
@@ -63,7 +65,7 @@ class RiskManager:
         if trade_cost > max_allowed:
             return False, (
                 f"Trade cost {format_currency(trade_cost)} exceeds max risk "
-                f"{format_currency(max_allowed)} (5% of {format_currency(account.balance)})"
+                f"{format_currency(max_allowed)} ({self.config.risk.max_risk_per_trade * 100:.0f}% of {format_currency(account.balance)})"
             )
 
         # 3. Portfolio total risk
@@ -75,18 +77,38 @@ class RiskManager:
                 f"limit {format_currency(max_portfolio_risk)}"
             )
 
+        # Ensure start equities are initialized
+        if self._month_start_equity is None:
+            self._month_start_equity = account.equity or self.config.account.starting_capital
+
+        if self._day_start_equity is None:
+            self._day_start_equity = account.equity or self.config.account.starting_capital
+            daily_limit_usd = self._day_start_equity * self.config.risk.daily_loss_limit_pct
+            monthly_limit_usd = self._month_start_equity * self.config.risk.monthly_drawdown_limit_pct
+            logger.info(
+                f"Dynamic Risk Limits initialized - Daily Loss Cap: ${daily_limit_usd:.2f} "
+                f"({self.config.risk.daily_loss_limit_pct*100}%), "
+                f"Monthly Drawdown Cap: ${monthly_limit_usd:.2f} "
+                f"({self.config.risk.monthly_drawdown_limit_pct*100}%)"
+            )
+
+        day_equity = self._day_start_equity
+        month_equity = self._month_start_equity
+        daily_limit_usd = day_equity * self.config.risk.daily_loss_limit_pct
+        monthly_limit_usd = month_equity * self.config.risk.monthly_drawdown_limit_pct
+
         # 4. Daily loss limit
-        if self._daily_realized_pnl <= -self.config.risk.daily_loss_limit:
+        if self._daily_realized_pnl <= -daily_limit_usd:
             return False, (
                 f"Daily loss limit reached: {format_currency(self._daily_realized_pnl)} "
-                f"(limit: {format_currency(-self.config.risk.daily_loss_limit)})"
+                f"(limit: {format_currency(-daily_limit_usd)})"
             )
 
         # 5. Monthly drawdown limit
-        if self._monthly_realized_pnl <= -self.config.risk.monthly_drawdown_limit:
+        if self._monthly_realized_pnl <= -monthly_limit_usd:
             return False, (
                 f"Monthly drawdown limit reached: {format_currency(self._monthly_realized_pnl)} "
-                f"(limit: {format_currency(-self.config.risk.monthly_drawdown_limit)})"
+                f"(limit: {format_currency(-monthly_limit_usd)})"
             )
 
         # 6. Correlation check — avoid too many same-sector positions
@@ -115,7 +137,7 @@ class RiskManager:
         )
         return True, "All risk checks passed"
 
-    def record_realized_pnl(self, pnl: float) -> None:
+    def record_realized_pnl(self, pnl: float, current_equity: Optional[float] = None) -> None:
         """Record a realized P&L from a closed trade."""
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -123,6 +145,22 @@ class RiskManager:
         if today != self._current_date:
             self._daily_realized_pnl = 0.0
             self._current_date = today
+            self._day_start_equity = None
+
+        if self._day_start_equity is None and current_equity is not None:
+            self._day_start_equity = current_equity
+            daily_limit_usd = self._day_start_equity * self.config.risk.daily_loss_limit_pct
+            month_equity = self._month_start_equity or current_equity
+            monthly_limit_usd = month_equity * self.config.risk.monthly_drawdown_limit_pct
+            logger.info(
+                f"Dynamic Risk Limits initialized - Daily Loss Cap: ${daily_limit_usd:.2f} "
+                f"({self.config.risk.daily_loss_limit_pct*100}%), "
+                f"Monthly Drawdown Cap: ${monthly_limit_usd:.2f} "
+                f"({self.config.risk.monthly_drawdown_limit_pct*100}%)"
+            )
+
+        if self._month_start_equity is None and current_equity is not None:
+            self._month_start_equity = current_equity
 
         self._daily_realized_pnl += pnl
         self._monthly_realized_pnl += pnl
@@ -138,17 +176,25 @@ class RiskManager:
 
     def _check_circuit_breakers(self) -> None:
         """Check if circuit breakers should activate."""
-        if self._daily_realized_pnl <= -self.config.risk.daily_loss_limit:
+        day_equity = self._day_start_equity or self.config.account.starting_capital
+        month_equity = self._month_start_equity or self.config.account.starting_capital
+        
+        daily_limit_usd = day_equity * self.config.risk.daily_loss_limit_pct
+        monthly_limit_usd = month_equity * self.config.risk.monthly_drawdown_limit_pct
+
+        if self._daily_realized_pnl <= -daily_limit_usd:
             self._circuit_breaker_active = True
             self._circuit_breaker_reason = (
-                f"Daily loss limit hit: {format_currency(self._daily_realized_pnl)}"
+                f"Daily loss limit hit: {format_currency(self._daily_realized_pnl)} "
+                f"(limit: {format_currency(-daily_limit_usd)})"
             )
             logger.critical(f"🚨 CIRCUIT BREAKER: {self._circuit_breaker_reason}")
 
-        if self._monthly_realized_pnl <= -self.config.risk.monthly_drawdown_limit:
+        if self._monthly_realized_pnl <= -monthly_limit_usd:
             self._circuit_breaker_active = True
             self._circuit_breaker_reason = (
-                f"Monthly drawdown limit hit: {format_currency(self._monthly_realized_pnl)}"
+                f"Monthly drawdown limit hit: {format_currency(self._monthly_realized_pnl)} "
+                f"(limit: {format_currency(-monthly_limit_usd)})"
             )
             logger.critical(f"🚨 CIRCUIT BREAKER: {self._circuit_breaker_reason}")
 
@@ -161,6 +207,7 @@ class RiskManager:
     def reset_daily(self) -> None:
         """Reset daily counters (called at market open)."""
         self._daily_realized_pnl = 0.0
+        self._day_start_equity = None
         logger.info("Daily risk counters reset")
 
     def reset_monthly(self) -> None:
@@ -168,6 +215,7 @@ class RiskManager:
         self._monthly_realized_pnl = 0.0
         self._circuit_breaker_active = False
         self._circuit_breaker_reason = ""
+        self._month_start_equity = None
         logger.info("Monthly risk counters reset")
 
     @property
@@ -180,11 +228,14 @@ class RiskManager:
 
     def get_risk_status(self) -> dict:
         """Get current risk status for dashboard."""
+        day_equity = self._day_start_equity or self.config.account.starting_capital
+        month_equity = self._month_start_equity or self.config.account.starting_capital
+        
         return {
             "daily_realized_pnl": self._daily_realized_pnl,
             "monthly_realized_pnl": self._monthly_realized_pnl,
-            "daily_limit": self.config.risk.daily_loss_limit,
-            "monthly_limit": self.config.risk.monthly_drawdown_limit,
+            "daily_limit": day_equity * self.config.risk.daily_loss_limit_pct,
+            "monthly_limit": month_equity * self.config.risk.monthly_drawdown_limit_pct,
             "circuit_breaker_active": self._circuit_breaker_active,
             "circuit_breaker_reason": self._circuit_breaker_reason,
         }
