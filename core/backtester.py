@@ -122,6 +122,13 @@ class OptionsBacktester:
         # Group records by Date
         df_data = df_data.copy()
         df_data["Date"] = pd.to_datetime(df_data["Date"], utc=True).dt.strftime("%Y-%m-%d")
+        
+        # Calculate annualized 20-day Historical Volatility (HV) for each symbol
+        df_data = df_data.sort_values(["Symbol", "Date"])
+        df_data["Returns"] = df_data.groupby("Symbol")["Close"].pct_change()
+        df_data["HV"] = df_data.groupby("Symbol")["Returns"].transform(lambda x: x.rolling(window=20).std() * (252 ** 0.5))
+        df_data["HV"] = df_data["HV"].fillna(0.20)
+        
         df_data = df_data.sort_values("Date")
         dates = df_data["Date"].unique()
         symbols = df_data["Symbol"].unique()
@@ -146,7 +153,7 @@ class OptionsBacktester:
                 "close": row["Close"],
                 "volume": row["Volume"],
                 "vix": row.get("VIX", 18.0),
-                "iv": row.get("IV", 0.18)
+                "iv": row["HV"]
             }
 
         sorted_dates = sorted(list(dates))
@@ -458,6 +465,9 @@ def load_csv(path: str) -> Dict[str, pd.DataFrame]:
 
 def main():
     import argparse
+    from utils import setup_logging
+    setup_logging()
+    
     parser = argparse.ArgumentParser(description="ApexSpreadator Backtesting Engine")
     parser.add_argument("--csv", type=str, required=True, help="Path to historical daily CSV")
     parser.add_argument("--capital", type=float, default=25000.0, help="Starting capital")
