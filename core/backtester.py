@@ -102,9 +102,7 @@ class OptionsBacktester:
         # Initialize strategy in backtest mode
         self.strategy = StrategyEngine(broker=None, config=CONFIG, risk_manager=None)
         
-        # Initialize screener for dynamic watchlist simulation
-        from core.screener import ScreenerEngine
-        self.screener = ScreenerEngine(CONFIG)
+        pass
 
 
     def run_backtest(self, df_data: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -229,19 +227,7 @@ class OptionsBacktester:
             self.positions = active_positions
 
             # ── 2. Scan for new entries via Strategy Engine ──
-            # First, update watchlist rotation interval logic
-            screener_type = getattr(CONFIG.strategy, "screener_type", "static")
-            if screener_type != "static":
-                from datetime import datetime, timedelta
-                current_sim_time = datetime.strptime(date_str, "%Y-%m-%d")
-                
-                if self._last_screen_time is None or (current_sim_time - self._last_screen_time) >= timedelta(minutes=30):
-                    self._last_screen_time = current_sim_time
-                    # Get new candidates using the simulation timestamp
-                    sim_date = date_str
-                    self.active_watchlist = self.screener.get_candidate_list(current_time=sim_date)
-            else:
-                self.active_watchlist = list(symbols)
+            # The active_watchlist is static and set to all symbols in the dataset
 
             # Feed daily bars to ALL trackers to build zone history and indicators
             opportunities = {}
@@ -264,42 +250,41 @@ class OptionsBacktester:
                     opportunities[sym] = opp
 
             # Then, scan for new entries only on symbols in the active watchlist
-            if len(self.positions) < config.get("max_concurrent_positions", 4):
-                held_symbols = {p.spread.symbol for p in self.positions if p.spread}
+            held_symbols = {p.spread.symbol for p in self.positions if p.spread}
 
-                for sym in self.active_watchlist:
-                    if sym in held_symbols:
-                        continue
-                    if len(self.positions) >= config.get("max_concurrent_positions", 4):
-                        break
+            for sym in self.active_watchlist:
+                if sym in held_symbols:
+                    continue
+                if len(self.positions) >= config.get("max_concurrent_positions", 4):
+                    break
 
-                    opp = opportunities.get(sym)
-                    if opp:
-                        # Retest detected and options selection approved. Check portfolio limits
-                        should_enter, reason = self.strategy.should_enter(opp, current_snapshot, self.positions)
+                opp = opportunities.get(sym)
+                if opp:
+                    # Retest detected and options selection approved. Check portfolio limits
+                    should_enter, reason = self.strategy.should_enter(opp, current_snapshot, self.positions)
 
-                        if should_enter:
-                            qty = self.strategy.calculate_position_size(opp.spread, current_snapshot)
-                            cost = opp.spread.net_debit * qty * 100.0
+                    if should_enter:
+                        qty = self.strategy.calculate_position_size(opp.spread, current_snapshot)
+                        cost = opp.spread.net_debit * qty * 100.0
 
-                            if qty > 0 and self.capital >= cost:
-                                self.capital -= cost
-                                
-                                new_pos = BacktestPosition(
-                                    symbol=sym,
-                                    long_strike=opp.spread.long_leg.strike,
-                                    short_strike=opp.spread.short_leg.strike,
-                                    right=opp.spread.right,
-                                    qty=qty,
-                                    entry_date=date_str,
-                                    entry_price=opp.spread.net_debit,
-                                    underlying_price=opp.underlying_price,
-                                    take_profit_price=opp.spread.short_leg.strike,
-                                    invalidation_price=opp.invalidation_price,
-                                    dte=config.get("dte", 30)
-                                )
-                                self.positions.append(new_pos)
-                                logger.info(f"📥 [{sym}] Entered Vertical Spread at {date_str} x{qty} spreads. Debit: ${opp.spread.net_debit:.2f} per spread.")
+                        if qty > 0 and self.capital >= cost:
+                            self.capital -= cost
+                            
+                            new_pos = BacktestPosition(
+                                symbol=sym,
+                                long_strike=opp.spread.long_leg.strike,
+                                short_strike=opp.spread.short_leg.strike,
+                                right=opp.spread.right,
+                                qty=qty,
+                                entry_date=date_str,
+                                entry_price=opp.spread.net_debit,
+                                underlying_price=opp.underlying_price,
+                                take_profit_price=opp.spread.short_leg.strike,
+                                invalidation_price=opp.invalidation_price,
+                                dte=config.get("dte", 30)
+                            )
+                            self.positions.append(new_pos)
+                            logger.info(f"📥 [{sym}] Entered Vertical Spread at {date_str} x{qty} spreads. Debit: ${opp.spread.net_debit:.2f} per spread.")
 
 
             # ── 3. End-of-day equity calculation ──

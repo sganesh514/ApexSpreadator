@@ -22,7 +22,6 @@ from core.strategy import StrategyEngine
 from core.execution import ExecutionEngine
 from core.position_manager import PositionManager
 from core.risk_manager import RiskManager
-from core.screener import ScreenerEngine
 from intelligence.learning import LearningEngine
 from intelligence.ollama_analyst import OllamaAnalyst
 from intelligence.journal import TradeJournal
@@ -94,76 +93,31 @@ class ApexSpreadatorAgent:
         # Check Ollama availability
         await self.analyst.check_availability()
 
-        # Load and parse active zones from data/active_zones.json
-        import json
-        zones_path = "data/active_zones.json"
-        if not os.path.exists(zones_path):
-            logger.error(f"❌ Active zones file not found at {zones_path}. Please run the offline screener first: `python scripts/run_screener.py`")
-            self.state = AgentState.ERROR
-            return
+        # Initialize watchlist from UniverseManager
+        from core.universe_manager import UniverseManager
         
-        try:
-            with open(zones_path, "r") as f:
-                active_zones = json.load(f)
-        except Exception as e:
-            logger.error(f"❌ Failed to parse active zones file: {e}. Please run the offline screener again: `python scripts/run_screener.py`")
-            self.state = AgentState.ERROR
-            return
+        # Support both CONFIG.strategy.universe_type and CONFIG.strategy.screener_type (as fallback)
+        universe_type = "static"
+        if hasattr(self.config.strategy, "universe_type"):
+            universe_type = self.config.strategy.universe_type
+        elif hasattr(self.config.strategy, "screener_type"):
+            universe_type = self.config.strategy.screener_type
             
-        candidates = list(active_zones.keys())
+        candidates = UniverseManager.get_universe(universe_type)
         if not candidates:
-            logger.error(f"❌ Active zones file at {zones_path} contains no candidates.")
+            logger.error("❌ Watchlist is empty. Check configuration and UniverseManager.")
             self.state = AgentState.ERROR
             return
             
         self.config.strategy.underlyings = candidates
-        logger.info(f"Watchlist initialized from active_zones.json: {', '.join(candidates)}")
+        logger.info(f"Watchlist initialized with universe ({universe_type}): {', '.join(candidates)}")
 
-        # Initialize the UnderlyingTracker instances explicitly using coordinates loaded from JSON
-        from models import Zone
-        for symbol, data in active_zones.items():
-            tracker = self.strategy.get_tracker(symbol)
-            tracker.bias = data.get("trend_status", "NEUTRAL")
+        # Initialize the UnderlyingTracker instances explicitly for every single symbol in the watchlist
+        for symbol in candidates:
+            self.strategy.get_tracker(symbol)
             
-            # Load demand zones
-            tracker.demand_zones = []
-            for dz in data.get("demand_zones", []):
-                tracker.demand_zones.append(
-                    Zone(
-                        id=dz.get("id", ""),
-                        type="DEMAND",
-                        high=float(dz.get("high", 0.0)),
-                        low=float(dz.get("low", 0.0)),
-                        origin_candle_time=dz.get("origin_candle_time", ""),
-                        is_active=dz.get("is_active", True)
-                    )
-                )
-            
-            # Load supply zones
-            tracker.supply_zones = []
-            for sz in data.get("supply_zones", []):
-                tracker.supply_zones.append(
-                    Zone(
-                        id=sz.get("id", ""),
-                        type="SUPPLY",
-                        high=float(sz.get("high", 0.0)),
-                        low=float(sz.get("low", 0.0)),
-                        origin_candle_time=sz.get("origin_candle_time", ""),
-                        is_active=sz.get("is_active", True)
-                    )
-                )
-            
-            # Load swing points
-            if "swing_highs" in data:
-                tracker.swing_highs = [(idx, val) for idx, val in data["swing_highs"]]
-            if "swing_lows" in data:
-                tracker.swing_lows = [(idx, val) for idx, val in data["swing_lows"]]
-            
-            # Load candles
-            if "candles" in data:
-                tracker.candles = data["candles"]
-                
-            logger.info(f"Initialized tracker for {symbol}: bias={tracker.bias}, demand_zones={len(tracker.demand_zones)}, supply_zones={len(tracker.supply_zones)}")
+        # Seed historical candles for all watchlist symbols to build initial market structure
+        await self._seed_historical_candles()
 
         # Refresh account data
         await self._refresh_account()
@@ -227,6 +181,66 @@ class ApexSpreadatorAgent:
                 await asyncio.sleep(10)
 
         await self._shutdown()
+
+    async def _seed_historical_candles(self):
+        """Fetch past 60 days of daily historical candles from yfinance to build initial market structure."""
+        logger.info("Seeding historical candles for watchlist symbols via yfinance...")
+        import yfinance as yf
+        from concurrent.futures import ThreadPoolExecutor
+        
+        symbols = self.config.strategy.underlyings
+        ticker_data = {}
+        
+        def fetch_ticker(symbol: str):
+            try:
+                yf_sym = symbol
+                if yf_sym == "VIX":
+                    yf_sym = "^VIX"
+                ticker = yf.Ticker(yf_sym)
+                df = ticker.history(period="60d")
+                if df.empty:
+                    return None
+                df = df.reset_index()
+                rename_map = {
+                    "Date": "Date",
+                    "Open": "Open",
+                    "High": "High",
+                    "Low": "Low",
+                    "Close": "Close",
+                    "Volume": "Volume"
+                }
+                df = df.rename(columns=rename_map)
+                df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.tz_localize(None)
+                return df
+            except Exception as e:
+                logger.error(f"Failed to fetch historical data for {symbol}: {e}")
+                return None
+                
+        # Fetch in parallel
+        max_workers = min(10, len(symbols))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = executor.map(fetch_ticker, symbols)
+            for sym, res in zip(symbols, results):
+                if res is not None:
+                    ticker_data[sym] = res
+                    
+        # Populate trackers
+        for symbol, df in ticker_data.items():
+            tracker = self.strategy.get_tracker(symbol)
+            for _, row in df.iterrows():
+                timestamp = row["Date"].strftime("%Y-%m-%d")
+                if tracker.candles and tracker.candles[-1]["time"] >= timestamp:
+                    continue
+                tracker.add_candle(
+                    open_p=row["Open"],
+                    high_p=row["High"],
+                    low_p=row["Low"],
+                    close_p=row["Close"],
+                    volume=row["Volume"],
+                    timestamp=timestamp,
+                    iv=0.18
+                )
+            logger.info(f"✅ Seeded {len(tracker.candles)} candles for {symbol}. Bias: {tracker.bias}")
 
     async def _run_scan(self):
         """Execute a single scan cycle by fetching the latest live prices and feeding them to trackers."""
