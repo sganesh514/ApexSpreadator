@@ -128,8 +128,8 @@ class OptionsBacktester:
         # Group records by Date and filter market hours
         df_data = df_data.copy()
         if is_intraday:
-            # Convert UTC index to US/Eastern timezone representation
-            datetimes_et = pd.to_datetime(df_data["Date"], utc=True).dt.tz_convert("US/Eastern")
+            # Parse localized Eastern datetime directly (no UTC conversion)
+            datetimes_et = pd.to_datetime(df_data["Date"])
             df_data["Date"] = datetimes_et.dt.strftime("%Y-%m-%d %H:%M:%S")
             
             # Enforce standard market hours (09:30 AM to 04:00 PM Eastern Time)
@@ -144,7 +144,7 @@ class OptionsBacktester:
             after_filter = len(df_data)
             logger.info(f"Filtered standard market hours (09:30 AM - 04:00 PM ET). Retained {after_filter} of {before_filter} bars.")
         else:
-            df_data["Date"] = pd.to_datetime(df_data["Date"], utc=True).dt.strftime("%Y-%m-%d")
+            df_data["Date"] = pd.to_datetime(df_data["Date"]).dt.strftime("%Y-%m-%d")
         
         # Calculate annualized Historical Volatility (HV) for each symbol depending on timeframe
         df_data = df_data.sort_values(["Symbol", "Date"])
@@ -202,14 +202,14 @@ class OptionsBacktester:
             if is_intraday:
                 try:
                     import datetime as dt_mod
-                    dt_local = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                    dt_local = pd.to_datetime(date_str)
                     start_time = dt_mod.time(9, 30)
                     end_time = dt_mod.time(16, 0)
                     
                     if not (start_time <= dt_local.time() <= end_time):
                         continue
-                except Exception:
-                    pass
+                except Exception as loop_err:
+                    logger.error(f"Error filtering market hours: {loop_err}")
 
             current_calendar_day = date_str[:10]
             day_changed = (current_calendar_day != last_calendar_day)
@@ -266,47 +266,57 @@ class OptionsBacktester:
                 import datetime as dt_mod
                 
                 is_expired = False
+                exit_date_to_log = date_str
                 exp_str = pos.spread.expiration
                 if exp_str:
                     try:
                         exp_date = datetime.strptime(exp_str, "%Y-%m-%d" if "-" in exp_str else "%Y%m%d").date()
                         
-                        if " " in date_str:
-                            dt_et = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-                            
-                            # Force close if past expiration date, or if it is expiration day and time is >= 2:00 PM ET
-                            if dt_et.date() > exp_date:
+                        # 1. Parse simulation's date_str to a native datetime object (no UTC/tz conversion needed!)
+                        dt_local = pd.to_datetime(date_str)
+                        current_date = dt_local.date()
+                        
+                        # 2. Robust Expiration Comparison Logic
+                        if current_date >= exp_date:
+                            if current_date > exp_date:
+                                # If the candle's local date is greater than the expiration date, force-close it instantly at market open.
+                                # The current candle is the first candle of the day (at 09:30:00).
+                                stock_price = rec["close"]
+                                exit_date_to_log = date_str
                                 is_expired = True
-                            elif dt_et.date() == exp_date and dt_et.time() >= dt_mod.time(14, 0):
-                                is_expired = True
-                        else:
-                            # Daily bar comparison
-                            dt_et_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-                            if dt_et_date >= exp_date:
-                                is_expired = True
+                                msg = f"⏰ Weekend/Holiday Expiry Circuit Breaker on {pos.id} ({pos.spread.symbol}): Option expired. Force-closed at market open ({exit_date_to_log})."
+                            else:
+                                # current_date == exp_date
+                                # Force-close the option spread as soon as the candle time is >= 14:00 (2:00 PM Eastern)
+                                if not is_intraday or dt_local.time() >= dt_mod.time(14, 0):
+                                    stock_price = rec["close"]
+                                    exit_date_to_log = date_str
+                                    is_expired = True
+                                    msg = f"⏰ Expiration Day Circuit Breaker on {pos.id} ({pos.spread.symbol}): Option expired. Closed at {exit_date_to_log}."
+                                    
+                            if is_expired:
+                                long_strike = pos.spread.long_leg.strike
+                                short_strike = pos.spread.short_leg.strike
+                                
+                                if is_call:
+                                    long_val = max(0.0, stock_price - long_strike)
+                                    short_val = max(0.0, stock_price - short_strike)
+                                else:
+                                    long_val = max(0.0, long_strike - stock_price)
+                                    short_val = max(0.0, short_strike - stock_price)
+                                    
+                                pos.current_value = long_val - short_val
+                                pos.unrealized_pnl = (pos.current_value - pos.entry_price) * pos.quantity * 100.0
+                                pos.unrealized_pnl_pct = (pos.current_value - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
+                                
+                                should_exit = True
+                                exit_reason = ExitReason.TIME_EXIT
                     except Exception as exp_err:
                         logger.error(f"Error parsing expiration for circuit breaker: {exp_err}")
                 
                 if is_expired:
-                    # Force close the option spread at standard intrinsic value on expiration day
-                    width = abs(pos.spread.long_leg.strike - pos.spread.short_leg.strike)
-                    long_strike = pos.spread.long_leg.strike
-                    short_strike = pos.spread.short_leg.strike
-                    
-                    if is_call:
-                        long_val = max(0.0, stock_price - long_strike)
-                        short_val = max(0.0, stock_price - short_strike)
-                    else:
-                        long_val = max(0.0, long_strike - stock_price)
-                        short_val = max(0.0, short_strike - stock_price)
-                        
-                    pos.current_value = long_val - short_val
-                    pos.unrealized_pnl = (pos.current_value - pos.entry_price) * pos.quantity * 100.0
-                    pos.unrealized_pnl_pct = (pos.current_value - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
-                    
-                    should_exit = True
-                    exit_reason = ExitReason.TIME_EXIT
-                    msg = f"⏰ Hard Expiry Circuit Breaker on {pos.id} ({pos.spread.symbol}): Option expired/closing before market close."
+                    # Already calculated pos.current_value and unrealized_pnl above
+                    pass
                 else:
                     # Check standard exit conditions
                     should_exit, exit_reason, msg = self.strategy.check_exit_conditions(pos, current_underlying_price=stock_price)
@@ -316,13 +326,13 @@ class OptionsBacktester:
                     self.capital += realized_cash
 
                     # Track monthly P&L
-                    month_key = date_str[:7]
+                    month_key = exit_date_to_log[:7]
                     self.monthly_pnl[month_key] = self.monthly_pnl.get(month_key, 0.0) + pos.unrealized_pnl
 
-                    # Calculate holding days using standard 24-hour day math
+                    # Calculate holding days using standard 24-hour day math on native Eastern datetimes
                     try:
-                        entry_dt = datetime.strptime(pos.entry_date, "%Y-%m-%d %H:%M:%S" if " " in pos.entry_date else "%Y-%m-%d")
-                        exit_dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S" if " " in date_str else "%Y-%m-%d")
+                        entry_dt = pd.to_datetime(pos.entry_date)
+                        exit_dt = pd.to_datetime(exit_date_to_log)
                         holding_days_val = int((exit_dt - entry_dt).total_seconds() / (3600 * 24))
                         holding_days_val = max(0, holding_days_val)
                     except Exception:
@@ -336,7 +346,7 @@ class OptionsBacktester:
                         "right": pos.spread.right,
                         "qty": pos.quantity,
                         "entry_date": pos.entry_date,
-                        "exit_date": date_str,
+                        "exit_date": exit_date_to_log,
                         "entry_price": round(pos.entry_price, 4),
                         "exit_price": round(pos.current_value, 4),
                         "pnl": round(pos.unrealized_pnl, 2),
@@ -572,9 +582,9 @@ def load_csv(path: str) -> Dict[str, pd.DataFrame]:
     timeframe = CONFIG.strategy.default_timeframe.strip().lower()
     is_intraday = timeframe in ["15m", "1h", "60m"]
     if is_intraday:
-        df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.strftime("%Y-%m-%d %H:%M:%S")
+        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d %H:%M:%S")
     else:
-        df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.strftime("%Y-%m-%d")
+        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
     data = {}
     for sym in df["Symbol"].unique():
         data[sym] = df[df["Symbol"] == sym].sort_values("Date")

@@ -210,7 +210,12 @@ class ApexSpreadatorAgent:
                     "Volume": "Volume"
                 }
                 df = df.rename(columns=rename_map)
-                df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.tz_localize(None)
+                dt_index = pd.to_datetime(df["Date"])
+                if dt_index.dt.tz is None:
+                    dt_index = dt_index.dt.tz_localize('UTC').dt.tz_convert('America/New_York')
+                else:
+                    dt_index = dt_index.dt.tz_convert('America/New_York')
+                df["Date"] = dt_index.dt.tz_localize(None)
                 return df
             except Exception as e:
                 logger.error(f"Failed to fetch historical data for {symbol}: {e}")
