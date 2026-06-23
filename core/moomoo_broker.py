@@ -11,14 +11,24 @@ import pandas as pd
 
 try:
     from moomoo import (
-        FTAPIConn, OpenQuoteContext, OpenSecContext,
+        FTAPIConn, OpenQuoteContext, OpenSecTradeContext as OpenSecContext,
         OptionType, OptionStrategyType, TrdSide, OrderType,
         TrdEnv, ModifyOrderOp, ComboLeg
     )
 except ImportError:
     # Fallback/mock structure if SDK is not present in local python env
-    from moomoo import FTAPIConn, OpenQuoteContext, OpenSecTradeContext as OpenSecContext
-    from moomoo import OptionType, OptionStrategyType, TrdSide, OrderType, TrdEnv, ModifyOrderOp, ComboLeg
+    class FTAPIConn: pass
+    class OpenQuoteContext: pass
+    class OpenSecContext: pass
+    class OptionType: pass
+    class OptionStrategyType: pass
+    class TrdSide: pass
+    class OrderType: pass
+    class TrdEnv:
+        REAL = 1
+        SIMULATE = 2
+    class ModifyOrderOp: pass
+    class ComboLeg: pass
 
 from utils import get_logger, calculate_dte
 from core.broker_base import BrokerBase
