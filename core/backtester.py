@@ -127,7 +127,13 @@ class OptionsBacktester:
         symbols = df_data["Symbol"].unique()
         
         self._last_screen_time = None
-        self.active_watchlist = list(symbols)
+        # Instantiate UniverseManager and filter watchlist
+        from core.universe_manager import UniverseManager
+        universe_manager = UniverseManager(CONFIG)
+        target_universe = universe_manager.get_universe()
+        symbols_set = set(df_data["Symbol"].unique())
+        self.active_watchlist = [sym for sym in target_universe if sym in symbols_set]
+        logger.info(f"Filtered universe to {len(self.active_watchlist)} symbols based on config.")
 
         
         # Build lookup table for rapid row access
@@ -231,7 +237,7 @@ class OptionsBacktester:
 
             # Feed daily bars to ALL trackers to build zone history and indicators
             opportunities = {}
-            for sym in symbols:
+            for sym in self.active_watchlist:
                 rec = lookup.get(sym, {}).get(date_str)
                 if not rec:
                     continue
@@ -256,7 +262,7 @@ class OptionsBacktester:
                 if sym in held_symbols:
                     continue
                 if len(self.positions) >= config.get("max_concurrent_positions", 4):
-                    break
+                    continue
 
                 opp = opportunities.get(sym)
                 if opp:
@@ -455,7 +461,14 @@ def main():
     parser = argparse.ArgumentParser(description="ApexSpreadator Backtesting Engine")
     parser.add_argument("--csv", type=str, required=True, help="Path to historical daily CSV")
     parser.add_argument("--capital", type=float, default=25000.0, help="Starting capital")
+    parser.add_argument("--symbols", type=str, nargs="+", default=[], help="Override symbols to backtest")
     args = parser.parse_args()
+
+    if args.symbols:
+        CONFIG.strategy.underlyings = args.symbols
+        # Force the universe to static so the UniverseManager strictly obeys this list
+        CONFIG.strategy.universe_type = "static" 
+        CONFIG.strategy.screener_type = "static"
 
     if not os.path.exists(args.csv):
         print(f"❌ File not found: {args.csv}")

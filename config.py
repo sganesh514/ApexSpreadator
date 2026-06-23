@@ -32,7 +32,7 @@ class StrategyConfig:
     underlyings: List[str] = field(default_factory=lambda: ["SPY", "QQQ"])
 
     # Universe selection settings
-    universe_type: str = "nasdaq100"          # "static", "sp500", or "nasdaq100"
+    universe_type: str = "static"          # "static", "sp500", or "nasdaq100"
 
     # Timeframe and DTE selection mapping (timeframe -> option DTE)
     timeframe_dte_map: Dict[str, int] = field(default_factory=lambda: {

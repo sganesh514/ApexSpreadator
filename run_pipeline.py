@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import argparse
+from core.universe_manager import UniverseManager
 
 # Configure stdout encoding to avoid Windows console errors
 if hasattr(sys.stdout, 'reconfigure'):
@@ -17,8 +18,9 @@ if hasattr(sys.stdout, 'reconfigure'):
 try:
     from config import CONFIG
     default_capital = CONFIG.account.starting_capital
-    default_symbols = CONFIG.strategy.underlyings
-except ImportError:
+    universe_mgr = UniverseManager(CONFIG)
+    default_symbols = universe_mgr.get_universe()
+except Exception as e:
     default_capital = 25000.0
     default_symbols = ["SPY", "QQQ"]
 
@@ -89,7 +91,7 @@ def main():
         type=str,
         nargs="+",
         default=default_symbols,
-        help=f"Symbols to backtest (default: {', '.join(default_symbols)})"
+        help=f"Symbols to backtest (default: {', '.join(default_symbols[:5])}...)"
     )
     args = parser.parse_args()
 
@@ -104,8 +106,16 @@ def main():
     )
 
     # 3. Run the backtest on the newly fetched data
+    backtest_cmd = [
+        sys.executable, "core/backtester.py", 
+        "--csv", "data/all_symbols_daily.csv", 
+        "--capital", str(args.capital)
+    ]
+    if args.symbols:
+        backtest_cmd.extend(["--symbols"] + args.symbols)
+
     run_command(
-        [sys.executable, "core/backtester.py", "--csv", "data/all_symbols_daily.csv", "--capital", str(args.capital)],
+        backtest_cmd,
         f"Running backtest on {symbols_str} with ${args.capital:,.2f} capital"
     )
 
