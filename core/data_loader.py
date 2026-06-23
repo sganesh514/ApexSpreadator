@@ -7,7 +7,7 @@ import sys
 import time
 import threading
 import pandas as pd
-from typing import Optional
+from typing import Optional, Any
 from utils import get_logger
 
 logger = get_logger("DataLoader")
@@ -161,9 +161,42 @@ def _fetch_backtest_history(symbol: str, timeframe: str, start_date: str, end_da
         return pd.DataFrame()
 
 
-def _fetch_live_history(symbol: str, timeframe: str, start_date: str, end_date: str) -> pd.DataFrame:
-    """Live historical data fetching via Moomoo Open API."""
-    ctx = get_quote_context()
+def _fetch_live_history(symbol: str, timeframe: str, start_date: str, end_date: str, broker: Optional[Any] = None) -> pd.DataFrame:
+    """Live historical data fetching via Moomoo Open API or yfinance for IBKR."""
+    if broker and broker.name == "Interactive Brokers":
+        logger.info(f"Fetching live history for {symbol} via yfinance (IBKR mode)...")
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            yf_interval = "1d"
+            if timeframe == "1h":
+                yf_interval = "1h"
+            elif timeframe == "15m":
+                yf_interval = "15m"
+            elif timeframe == "5m":
+                yf_interval = "5m"
+            
+            df = ticker.history(start=start_date, end=end_date, interval=yf_interval)
+            if df.empty:
+                return pd.DataFrame()
+            df = df.reset_index()
+            if "Datetime" in df.columns:
+                df = df.rename(columns={"Datetime": "Date"})
+            df = df[["Date", "Open", "High", "Low", "Close", "Volume"]].copy()
+            df["Date"] = pd.to_datetime(df["Date"])
+            for col in ["Open", "High", "Low", "Close", "Volume"]:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+            df = df.sort_values("Date").reset_index(drop=True)
+            return df
+        except Exception as e:
+            logger.error(f"Error fetching historical data via yfinance for {symbol}: {e}")
+            return pd.DataFrame()
+
+    if broker and hasattr(broker, "_quote_ctx") and broker._quote_ctx:
+        ctx = broker._quote_ctx
+    else:
+        ctx = get_quote_context()
+        
     if ctx is None:
         logger.error(f"Cannot fetch live data for {symbol} - Moomoo Quote Context not available.")
         return pd.DataFrame()
@@ -292,14 +325,15 @@ def get_market_history(
     timeframe: str,
     start_date: str,
     end_date: str,
-    mode: str
+    mode: str,
+    broker: Optional[Any] = None
 ) -> pd.DataFrame:
     """
     Exposes a unified interface for retrieving market history.
     If mode is 'BACKTEST', reads from local files, ensuring complete offline isolation.
-    If mode is 'LIVE', fetches from Moomoo Open API Gateway.
+    If mode is 'LIVE', fetches from Moomoo Open API Gateway or yfinance (for IBKR).
     """
     if mode.upper() == "BACKTEST":
         return _fetch_backtest_history(symbol, timeframe, start_date, end_date)
     else:
-        return _fetch_live_history(symbol, timeframe, start_date, end_date)
+        return _fetch_live_history(symbol, timeframe, start_date, end_date, broker)

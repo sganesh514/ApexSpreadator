@@ -21,8 +21,9 @@ class ScreenerEngine:
     Screens standard watchlists (e.g. tech/index large caps) for active volatility regimes.
     """
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig, broker: Optional[Any] = None):
         self.config = config
+        self.broker = broker
         # Pool of liquid stocks/ETFs to scan from
         self.default_pool = [
             "SPY", "QQQ", "IWM", "AAPL", "MSFT", "AMZN", "GOOG", "META", 
@@ -219,7 +220,8 @@ class ScreenerEngine:
                         timeframe="1d",
                         start_date=start_date,
                         end_date=end_date,
-                        mode="LIVE"
+                        mode="LIVE",
+                        broker=self.broker
                     )
                     if df.empty:
                         return None

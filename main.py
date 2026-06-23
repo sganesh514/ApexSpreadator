@@ -2,7 +2,7 @@
 ApexSpreadator Agent — Main Entry Point
 Starts the trading agent loop and web dashboard.
 """
-from core.moomoo_broker import MoomooBroker
+from core.broker_factory import get_broker
 import asyncio
 import signal
 import sys
@@ -18,7 +18,6 @@ from models import (
     AgentState, TradeStatus, ExitReason,
     AccountSnapshot, ScannerStatus
 )
-from core.moomoo_broker import MoomooBroker
 from core.strategy import StrategyEngine
 from core.execution import ExecutionEngine
 from core.position_manager import PositionManager
@@ -47,11 +46,8 @@ class ApexSpreadatorAgent:
         self._paused = False
 
         # Initialize components
-        self.broker = MoomooBroker(
-            host=self.config.connection.host,
-            port=self.config.connection.port,
-            client_id=self.config.connection.client_id,
-        )
+        # Initialize components using broker factory
+        self.broker = get_broker(self.config.connection.broker_type, self.config)
         self.risk_manager = RiskManager(self.config)
         self.strategy = StrategyEngine(self.broker, self.config, self.risk_manager)
         self.execution = ExecutionEngine(self.broker, self.config)
@@ -221,7 +217,8 @@ class ApexSpreadatorAgent:
                     timeframe="1d",
                     start_date=start_dt.strftime("%Y-%m-%d"),
                     end_date=end_dt.strftime("%Y-%m-%d"),
-                    mode="LIVE"
+                    mode="LIVE",
+                    broker=self.broker
                 )
                 
             df = await asyncio.to_thread(fetch_data)
@@ -275,7 +272,8 @@ class ApexSpreadatorAgent:
                         timeframe="1d",
                         start_date=start_dt.strftime("%Y-%m-%d"),
                         end_date=end_dt.strftime("%Y-%m-%d"),
-                        mode="LIVE"
+                        mode="LIVE",
+                        broker=self.broker
                     )
                     
                 df = await asyncio.to_thread(fetch_data)
@@ -605,19 +603,36 @@ def main():
 
     os.makedirs("data", exist_ok=True)
 
-    # Parse command line args
-    port = CONFIG.connection.port
-    dashboard_port = CONFIG.dashboard.port
+    import argparse
+    parser = argparse.ArgumentParser(description="ApexSpreadator Agent")
+    parser.add_argument(
+        "--broker",
+        type=str,
+        default=CONFIG.connection.broker_type,
+        help="Broker to switch to (ibkr or moomoo)"
+    )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Run in live trading mode instead of paper/simulated"
+    )
+    parser.add_argument(
+        "--dashboard-port",
+        type=int,
+        default=CONFIG.dashboard.port,
+        help="Port for running the FastAPI web dashboard"
+    )
+    args = parser.parse_args()
 
-    if "--live" in sys.argv:
+    # Apply options to configuration
+    CONFIG.connection.broker_type = args.broker
+    dashboard_port = args.dashboard_port
+
+    if args.live:
         logger_main.warning("🔴 LIVE TRADING MODE — Real money at risk!")
     else:
-        logger_main.info(f"📄 Paper trading mode (port {CONFIG.connection.port})")
-
-    if "--dashboard-port" in sys.argv:
-        idx = sys.argv.index("--dashboard-port")
-        if idx + 1 < len(sys.argv):
-            dashboard_port = int(sys.argv[idx + 1])
+        display_port = 7497 if args.broker.lower() == "ibkr" else 11111
+        logger_main.info(f"📄 Paper trading mode (broker: {args.broker.upper()}, port {display_port})")
 
     # Create the agent
     agent = ApexSpreadatorAgent(CONFIG)
