@@ -207,37 +207,29 @@ def _fetch_live_history(symbol: str, timeframe: str, start_date: str, end_date: 
         
     try:
         from moomoo import KLType, AuType
+        KType = KLType
     except ImportError:
-        logger.error("Failed to import KLType, AuType from moomoo.")
+        logger.error("Failed to import KLType/KType, AuType from moomoo.")
         return pd.DataFrame()
         
-    # Map timeframe string to Moomoo KLType
-    ktype = KLType.K_DAY
+    # Map timeframe string to Moomoo KType
+    ktype = KType.K_DAY
     if timeframe == "1d":
-        ktype = KLType.K_DAY
+        ktype = KType.K_DAY
     elif timeframe == "1h":
-        ktype = KLType.K_60M
+        ktype = KType.K_60M
     elif timeframe == "15m":
-        ktype = KLType.K_15M
+        ktype = KType.K_15M
     elif timeframe == "5m":
-        ktype = KLType.K_5M
+        ktype = KType.K_5M
         
     # Implement retry loop for Moomoo request
     data = None
     ret = -1
     for attempt in range(3):
         try:
-            # Check if ctx has get_history_klData, else use request_history_kline
-            if hasattr(ctx, "get_history_klData"):
-                logger.debug(f"Calling get_history_klData for {code} (attempt {attempt + 1})...")
-                ret, data = ctx.get_history_klData(
-                    code=code,
-                    start=start_date,
-                    end=end_date,
-                    ktype=ktype,
-                    autype=AuType.QFQ
-                )
-            else:
+            # Prioritize request_history_kline since it is the method available in this SDK version
+            if hasattr(ctx, "request_history_kline"):
                 logger.debug(f"Calling request_history_kline for {code} (attempt {attempt + 1})...")
                 ret, data, page_key = ctx.request_history_kline(
                     code=code,
@@ -246,6 +238,31 @@ def _fetch_live_history(symbol: str, timeframe: str, start_date: str, end_date: 
                     ktype=ktype,
                     autype=AuType.QFQ
                 )
+            elif hasattr(ctx, "get_history_kl_data"):
+                logger.debug(f"Calling get_history_kl_data for {code} (attempt {attempt + 1})...")
+                ret, data = ctx.get_history_kl_data(
+                    code=code,
+                    start=start_date,
+                    end=end_date,
+                    ktype=ktype,
+                    autype=AuType.QFQ
+                )
+            elif hasattr(ctx, "get_history_klData"):
+                logger.debug(f"Calling legacy get_history_klData for {code} (attempt {attempt + 1})...")
+                ret, data = ctx.get_history_klData(
+                    code=code,
+                    start=start_date,
+                    end=end_date,
+                    ktype=ktype,
+                    autype=AuType.QFQ
+                )
+            else:
+                available_methods = [attr for attr in dir(ctx) if not attr.startswith("_") and callable(getattr(ctx, attr))]
+                logger.error(
+                    f"OpenQuoteContext has no historical candle method. "
+                    f"Available methods: {available_methods}"
+                )
+                return pd.DataFrame()
             
             if ret == 0:
                 break
