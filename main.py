@@ -610,11 +610,9 @@ def main():
     dashboard_port = CONFIG.dashboard.port
 
     if "--live" in sys.argv:
-        CONFIG.connection.port = 7496
-        port = 7496
         logger_main.warning("🔴 LIVE TRADING MODE — Real money at risk!")
     else:
-        logger_main.info("📄 Paper trading mode (port 7497)")
+        logger_main.info(f"📄 Paper trading mode (port {CONFIG.connection.port})")
 
     if "--dashboard-port" in sys.argv:
         idx = sys.argv.index("--dashboard-port")

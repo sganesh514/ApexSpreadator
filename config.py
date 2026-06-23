@@ -10,7 +10,7 @@ from typing import List, Dict
 class ConnectionConfig:
     """IBKR connection settings."""
     host: str = "127.0.0.1"
-    port: int = 7497          # Paper: 7497, Live: 7496
+    port: int = 11111         # Moomoo OpenD default port: 11111
     client_id: int = 1
     timeout: int = 30         # Connection timeout in seconds
     max_reconnect_attempts: int = 10

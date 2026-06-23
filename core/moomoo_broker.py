@@ -17,9 +17,18 @@ try:
     )
 except ImportError:
     # Fallback/mock structure if SDK is not present in local python env
-    class FTAPIConn: pass
-    class OpenQuoteContext: pass
-    class OpenSecContext: pass
+    class FTAPIConn:
+        def __init__(self, *args, **kwargs): pass
+    class OpenQuoteContext:
+        def __init__(self, *args, **kwargs): pass
+        def start(self): pass
+        def close(self): pass
+        def get_sync_conn_id(self): return 9999
+    class OpenSecContext:
+        def __init__(self, *args, **kwargs): pass
+        def start(self): pass
+        def close(self): pass
+        def get_sync_conn_id(self): return 9999
     class OptionType: pass
     class OptionStrategyType: pass
     class TrdSide: pass
