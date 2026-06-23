@@ -122,6 +122,8 @@ class OptionsBacktester:
         self.strategy.selector.risk_filter_logs = []  # Reset selector logs
 
         # Group records by Date
+        df_data = df_data.copy()
+        df_data["Date"] = pd.to_datetime(df_data["Date"], utc=True).dt.strftime("%Y-%m-%d")
         df_data = df_data.sort_values("Date")
         dates = df_data["Date"].unique()
         symbols = df_data["Symbol"].unique()
@@ -456,7 +458,7 @@ class OptionsBacktester:
 
 def load_csv(path: str) -> Dict[str, pd.DataFrame]:
     df = pd.read_csv(path)
-    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+    df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.strftime("%Y-%m-%d")
     data = {}
     for sym in df["Symbol"].unique():
         data[sym] = df[df["Symbol"] == sym].sort_values("Date")
