@@ -96,6 +96,12 @@ def main():
     print("Downloading VIX index data...")
     try:
         vix_df = download_symbol("^VIX", start_date, end_date, "1d")
+        vix_df.index = pd.to_datetime(vix_df.index)
+        if vix_df.index.tz is None:
+            vix_df.index = vix_df.index.tz_localize('UTC').tz_convert('America/New_York')
+        else:
+            vix_df.index = vix_df.index.tz_convert('America/New_York')
+        vix_df.index = vix_df.index.tz_localize(None)
         vix_df = vix_df[["Close"]].rename(columns={"Close": "VIX"})
         vix_df.to_csv(f"data/{args.interval}/vix_daily.csv")
         print("VIX data downloaded successfully.")
@@ -136,8 +142,19 @@ def main():
                 vol_df = download_symbol(vol_symbol, start_date, end_date, "1d")
                 vol_df = vol_df[["Close"]].rename(columns={"Close": "VolIndex"})
                 
-                df.index = pd.to_datetime(df.index, utc=True)
-                vol_df.index = pd.to_datetime(vol_df.index, utc=True)
+                df.index = pd.to_datetime(df.index)
+                if df.index.tz is None:
+                    df.index = df.index.tz_localize('UTC').tz_convert('America/New_York')
+                else:
+                    df.index = df.index.tz_convert('America/New_York')
+                df.index = df.index.tz_localize(None)
+                
+                vol_df.index = pd.to_datetime(vol_df.index)
+                if vol_df.index.tz is None:
+                    vol_df.index = vol_df.index.tz_localize('UTC').tz_convert('America/New_York')
+                else:
+                    vol_df.index = vol_df.index.tz_convert('America/New_York')
+                vol_df.index = vol_df.index.tz_localize(None)
                 
                 df = df.sort_index()
                 vol_df = vol_df.sort_index()
@@ -147,7 +164,12 @@ def main():
             except Exception as vol_err:
                 print(f"Warning: Failed to download {vol_symbol} for {symbol}: {vol_err}. Falling back to standard VIX.")
                 if 'vix_df' in locals():
-                    vix_df.index = pd.to_datetime(vix_df.index, utc=True)
+                    vix_df.index = pd.to_datetime(vix_df.index)
+                    if vix_df.index.tz is None:
+                        vix_df.index = vix_df.index.tz_localize('UTC').tz_convert('America/New_York')
+                    else:
+                        vix_df.index = vix_df.index.tz_convert('America/New_York')
+                    vix_df.index = vix_df.index.tz_localize(None)
                     df = df.sort_index()
                     vix_df = vix_df.sort_index()
                     df = pd.merge_asof(df, vix_df, left_index=True, right_index=True, direction='backward')
