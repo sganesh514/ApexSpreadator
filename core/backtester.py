@@ -128,12 +128,11 @@ class OptionsBacktester:
         # Group records by Date and filter market hours
         df_data = df_data.copy()
         if is_intraday:
-            df_data["Date"] = pd.to_datetime(df_data["Date"], utc=True).dt.strftime("%Y-%m-%d %H:%M:%S")
+            # Convert UTC index to US/Eastern timezone representation
+            datetimes_et = pd.to_datetime(df_data["Date"], utc=True).dt.tz_convert("US/Eastern")
+            df_data["Date"] = datetimes_et.dt.strftime("%Y-%m-%d %H:%M:%S")
             
             # Enforce standard market hours (09:30 AM to 04:00 PM Eastern Time)
-            datetimes_utc = pd.to_datetime(df_data["Date"], utc=True)
-            datetimes_et = datetimes_utc.dt.tz_convert("US/Eastern")
-            
             import datetime
             start_time = datetime.time(9, 30)
             end_time = datetime.time(16, 0)
@@ -199,6 +198,19 @@ class OptionsBacktester:
         
         # Main simulation daily/intraday loop
         for day_idx, date_str in enumerate(sorted_dates):
+            # Enforce strict market hours filter check inside the loop
+            if is_intraday:
+                try:
+                    import datetime as dt_mod
+                    dt_local = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                    start_time = dt_mod.time(9, 30)
+                    end_time = dt_mod.time(16, 0)
+                    
+                    if not (start_time <= dt_local.time() <= end_time):
+                        continue
+                except Exception:
+                    pass
+
             current_calendar_day = date_str[:10]
             day_changed = (current_calendar_day != last_calendar_day)
             last_calendar_day = current_calendar_day
@@ -250,8 +262,54 @@ class OptionsBacktester:
                 pos.unrealized_pnl = (pos.current_value - pos.entry_price) * pos.quantity * 100.0
                 pos.unrealized_pnl_pct = (pos.current_value - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
 
-                # Check exit conditions
-                should_exit, exit_reason, msg = self.strategy.check_exit_conditions(pos, current_underlying_price=stock_price)
+                # Check Hard Expiry Circuit Breaker (No Ghost Tracking)
+                import datetime as dt_mod
+                
+                is_expired = False
+                exp_str = pos.spread.expiration
+                if exp_str:
+                    try:
+                        exp_date = datetime.strptime(exp_str, "%Y-%m-%d" if "-" in exp_str else "%Y%m%d").date()
+                        
+                        if " " in date_str:
+                            dt_et = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                            
+                            # Force close if past expiration date, or if it is expiration day and time is >= 2:00 PM ET
+                            if dt_et.date() > exp_date:
+                                is_expired = True
+                            elif dt_et.date() == exp_date and dt_et.time() >= dt_mod.time(14, 0):
+                                is_expired = True
+                        else:
+                            # Daily bar comparison
+                            dt_et_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                            if dt_et_date >= exp_date:
+                                is_expired = True
+                    except Exception as exp_err:
+                        logger.error(f"Error parsing expiration for circuit breaker: {exp_err}")
+                
+                if is_expired:
+                    # Force close the option spread at standard intrinsic value on expiration day
+                    width = abs(pos.spread.long_leg.strike - pos.spread.short_leg.strike)
+                    long_strike = pos.spread.long_leg.strike
+                    short_strike = pos.spread.short_leg.strike
+                    
+                    if is_call:
+                        long_val = max(0.0, stock_price - long_strike)
+                        short_val = max(0.0, stock_price - short_strike)
+                    else:
+                        long_val = max(0.0, long_strike - stock_price)
+                        short_val = max(0.0, short_strike - stock_price)
+                        
+                    pos.current_value = long_val - short_val
+                    pos.unrealized_pnl = (pos.current_value - pos.entry_price) * pos.quantity * 100.0
+                    pos.unrealized_pnl_pct = (pos.current_value - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
+                    
+                    should_exit = True
+                    exit_reason = ExitReason.TIME_EXIT
+                    msg = f"⏰ Hard Expiry Circuit Breaker on {pos.id} ({pos.spread.symbol}): Option expired/closing before market close."
+                else:
+                    # Check standard exit conditions
+                    should_exit, exit_reason, msg = self.strategy.check_exit_conditions(pos, current_underlying_price=stock_price)
 
                 if should_exit:
                     realized_cash = pos.current_value * pos.quantity * 100.0
@@ -287,6 +345,7 @@ class OptionsBacktester:
                         "reason": exit_reason.value,
                         "expiration": pos.spread.expiration
                     })
+                    logger.info(msg)
                 else:
                     active_positions.append(pos)
 
