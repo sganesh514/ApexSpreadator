@@ -426,13 +426,32 @@ function formatPnl(amount) {
 }
 
 function formatExpiration(exp) {
-    if (!exp || exp.length < 8) return exp || '?';
-    try {
-        const d = new Date(exp.substring(0, 4), parseInt(exp.substring(4, 6)) - 1, exp.substring(6, 8));
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    } catch {
-        return exp;
+    if (!exp) return '?';
+    // If it contains dashes, parse as YYYY-MM-DD
+    if (exp.includes('-')) {
+        const parts = exp.split('-');
+        if (parts.length >= 3) {
+            const year = parseInt(parts[0]);
+            const month = parseInt(parts[1]) - 1;
+            const day = parseInt(parts[2]);
+            if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+                const d = new Date(year, month, day);
+                if (!isNaN(d.getTime())) {
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+            }
+        }
     }
+    // If it is 8 chars long and starts with digits (YYYYMMDD)
+    if (exp.length >= 8 && /^\d+$/.test(exp.substring(0, 8))) {
+        try {
+            const d = new Date(exp.substring(0, 4), parseInt(exp.substring(4, 6)) - 1, exp.substring(6, 8));
+            if (!isNaN(d.getTime())) {
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+        } catch {}
+    }
+    return exp;
 }
 
 function formatExitReason(reason) {

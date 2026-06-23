@@ -92,11 +92,17 @@ class StrategyEngine:
         timeframe = self.config.strategy.default_timeframe
         dte = self.config.strategy.timeframe_dte_map.get(timeframe, 30)
         
-        # In a backtest or live, we determine expiration based on current time + dte
-        # For mock backtester we just use a generic expiration date string
-        # Let's mock a standard expiration format like YYYYMMDD
+        # Parse timestamp to calculate expiration based on historical bar date
         import datetime
-        expiration_date = (datetime.datetime.now() + datetime.timedelta(days=dte)).strftime("%Y%m%d")
+        try:
+            if " " in timestamp:
+                bar_dt = datetime.datetime.strptime(timestamp.split(".")[0], "%Y-%m-%d %H:%M:%S")
+            else:
+                bar_dt = datetime.datetime.strptime(timestamp, "%Y-%m-%d")
+        except Exception:
+            bar_dt = datetime.datetime.now()
+            
+        expiration_date = (bar_dt + datetime.timedelta(days=dte)).strftime("%Y%m%d")
 
         # Implied Volatility (IV)
         # In live we query broker, in backtesting we pass it or fallback to the candle's VIX metric

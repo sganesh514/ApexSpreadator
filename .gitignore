@@ -18,6 +18,9 @@ data/*.csv
 data/*.json
 data/*.log
 data/temp/
+data/15m/
+data/1h/
+data/1d/
 
 # Exclude standard download script
 !data/download_historical.py

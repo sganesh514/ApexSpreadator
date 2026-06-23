@@ -6,6 +6,7 @@ import os
 import sys
 import math
 import copy
+from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
 import pandas as pd
 
@@ -39,7 +40,8 @@ class BacktestPosition(Position):
         underlying_price: float,
         take_profit_price: float,
         invalidation_price: float,
-        dte: int = 30
+        dte: int = 30,
+        expiration: str = ""
     ):
         BacktestPosition._counter += 1
         
@@ -56,7 +58,7 @@ class BacktestPosition(Position):
         spread_obj = VerticalSpread(
             id=f"SPD_{BacktestPosition._counter:05d}",
             symbol=symbol,
-            expiration="",
+            expiration=expiration,
             right=right,
             long_leg=long_leg,
             short_leg=short_leg,
@@ -119,14 +121,47 @@ class OptionsBacktester:
         self.monthly_pnl = {}
         self.strategy.selector.risk_filter_logs = []  # Reset selector logs
 
-        # Group records by Date
+        # Determine timeframe and intraday status
+        timeframe = CONFIG.strategy.default_timeframe.strip().lower()
+        is_intraday = timeframe in ["15m", "1h", "60m"]
+
+        # Group records by Date and filter market hours
         df_data = df_data.copy()
-        df_data["Date"] = pd.to_datetime(df_data["Date"], utc=True).dt.strftime("%Y-%m-%d")
+        if is_intraday:
+            df_data["Date"] = pd.to_datetime(df_data["Date"], utc=True).dt.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Enforce standard market hours (09:30 AM to 04:00 PM Eastern Time)
+            datetimes_utc = pd.to_datetime(df_data["Date"], utc=True)
+            datetimes_et = datetimes_utc.dt.tz_convert("US/Eastern")
+            
+            import datetime
+            start_time = datetime.time(9, 30)
+            end_time = datetime.time(16, 0)
+            
+            market_hours_mask = (datetimes_et.dt.time >= start_time) & (datetimes_et.dt.time <= end_time)
+            
+            before_filter = len(df_data)
+            df_data = df_data[market_hours_mask].copy()
+            after_filter = len(df_data)
+            logger.info(f"Filtered standard market hours (09:30 AM - 04:00 PM ET). Retained {after_filter} of {before_filter} bars.")
+        else:
+            df_data["Date"] = pd.to_datetime(df_data["Date"], utc=True).dt.strftime("%Y-%m-%d")
         
-        # Calculate annualized 20-day Historical Volatility (HV) for each symbol
+        # Calculate annualized Historical Volatility (HV) for each symbol depending on timeframe
         df_data = df_data.sort_values(["Symbol", "Date"])
         df_data["Returns"] = df_data.groupby("Symbol")["Close"].pct_change()
-        df_data["HV"] = df_data.groupby("Symbol")["Returns"].transform(lambda x: x.rolling(window=20).std() * (252 ** 0.5))
+        
+        if timeframe == "15m":
+            window_size = 520  # 20 days of 15m bars
+            ann_factor = (252 * 26) ** 0.5
+        elif timeframe in ["1h", "60m"]:
+            window_size = 140  # 20 days of hourly bars
+            ann_factor = (252 * 7) ** 0.5
+        else:
+            window_size = 20
+            ann_factor = 252 ** 0.5
+            
+        df_data["HV"] = df_data.groupby("Symbol")["Returns"].transform(lambda x: x.rolling(window=window_size).std() * ann_factor)
         df_data["HV"] = df_data["HV"].fillna(0.20)
         
         df_data = df_data.sort_values("Date")
@@ -159,8 +194,15 @@ class OptionsBacktester:
         sorted_dates = sorted(list(dates))
         total_days = len(sorted_dates)
         
-        # Main simulation daily loop
+        # Keep track of calendar date to decrement DTE once per day
+        last_calendar_day = None
+        
+        # Main simulation daily/intraday loop
         for day_idx, date_str in enumerate(sorted_dates):
+            current_calendar_day = date_str[:10]
+            day_changed = (current_calendar_day != last_calendar_day)
+            last_calendar_day = current_calendar_day
+            
             # Print progress
             if day_idx % max(1, int(total_days / 10)) == 0 or day_idx == total_days - 1:
                 pct = (day_idx / (total_days - 1)) * 100 if total_days > 1 else 100.0
@@ -185,11 +227,12 @@ class OptionsBacktester:
                 stock_price = rec["close"]
                 iv = rec["iv"]
 
-                # Decrement DTE
-                if pos.spread.long_leg:
-                    pos.spread.long_leg.dte = max(0, pos.spread.long_leg.dte - 1)
-                if pos.spread.short_leg:
-                    pos.spread.short_leg.dte = max(0, pos.spread.short_leg.dte - 1)
+                # Decrement DTE only once per calendar day
+                if day_changed:
+                    if pos.spread.long_leg:
+                        pos.spread.long_leg.dte = max(0, pos.spread.long_leg.dte - 1)
+                    if pos.spread.short_leg:
+                        pos.spread.short_leg.dte = max(0, pos.spread.short_leg.dte - 1)
 
                 # Price legs via Black-Scholes
                 is_call = (pos.spread.right == "C")
@@ -218,6 +261,15 @@ class OptionsBacktester:
                     month_key = date_str[:7]
                     self.monthly_pnl[month_key] = self.monthly_pnl.get(month_key, 0.0) + pos.unrealized_pnl
 
+                    # Calculate holding days using standard 24-hour day math
+                    try:
+                        entry_dt = datetime.strptime(pos.entry_date, "%Y-%m-%d %H:%M:%S" if " " in pos.entry_date else "%Y-%m-%d")
+                        exit_dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S" if " " in date_str else "%Y-%m-%d")
+                        holding_days_val = int((exit_dt - entry_dt).total_seconds() / (3600 * 24))
+                        holding_days_val = max(0, holding_days_val)
+                    except Exception:
+                        holding_days_val = 0
+
                     self.trade_history.append({
                         "id": pos.id,
                         "symbol": pos.spread.symbol,
@@ -231,8 +283,9 @@ class OptionsBacktester:
                         "exit_price": round(pos.current_value, 4),
                         "pnl": round(pos.unrealized_pnl, 2),
                         "pnl_pct": round(pos.unrealized_pnl_pct, 4),
-                        "holding_days": (day_idx - sorted_dates.index(pos.entry_date)) if pos.entry_date in sorted_dates else 0,
-                        "reason": exit_reason.value
+                        "holding_days": holding_days_val,
+                        "reason": exit_reason.value,
+                        "expiration": pos.spread.expiration
                     })
                 else:
                     active_positions.append(pos)
@@ -294,7 +347,8 @@ class OptionsBacktester:
                                 underlying_price=opp.underlying_price,
                                 take_profit_price=opp.spread.short_leg.strike,
                                 invalidation_price=opp.invalidation_price,
-                                dte=config.get("dte", 30)
+                                dte=opp.spread.long_leg.dte if (opp.spread and opp.spread.long_leg) else config.get("dte", 30),
+                                expiration=opp.spread.expiration if opp.spread else ""
                             )
                             self.positions.append(new_pos)
                             logger.info(f"📥 [{sym}] Entered Vertical Spread at {date_str} x{qty} spreads. Debit: ${opp.spread.net_debit:.2f} per spread.")
@@ -398,7 +452,7 @@ class OptionsBacktester:
             if t["pnl"] > 0:
                 symbol_stats[sym]["wins"] += 1
 
-        holding_days = [t.get("holding_days", 0) for t in self.trade_history if t.get("holding_days", 0) > 0]
+        holding_days = [t.get("holding_days", 0) for t in self.trade_history]
         avg_hold = sum(holding_days) / len(holding_days) if holding_days else 0
 
         monthly_vals = list(self.monthly_pnl.values())
@@ -456,7 +510,12 @@ class OptionsBacktester:
 
 def load_csv(path: str) -> Dict[str, pd.DataFrame]:
     df = pd.read_csv(path)
-    df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.strftime("%Y-%m-%d")
+    timeframe = CONFIG.strategy.default_timeframe.strip().lower()
+    is_intraday = timeframe in ["15m", "1h", "60m"]
+    if is_intraday:
+        df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.strftime("%Y-%m-%d")
     data = {}
     for sym in df["Symbol"].unique():
         data[sym] = df[df["Symbol"] == sym].sort_values("Date")
@@ -465,14 +524,21 @@ def load_csv(path: str) -> Dict[str, pd.DataFrame]:
 
 def main():
     import argparse
+    import os
+    import sys
     from utils import setup_logging
     setup_logging()
     
     parser = argparse.ArgumentParser(description="ApexSpreadator Backtesting Engine")
-    parser.add_argument("--csv", type=str, required=True, help="Path to historical daily CSV")
+    parser.add_argument("--csv", type=str, required=True, help="Path to historical combined CSV")
     parser.add_argument("--capital", type=float, default=25000.0, help="Starting capital")
     parser.add_argument("--symbols", type=str, nargs="+", default=[], help="Override symbols to backtest")
+    parser.add_argument("--timeframe", "--interval", dest="interval", type=str, default="1d", help="Timeframe of the data to backtest")
+    parser.add_argument("--lookback", type=str, default="2y", help="Lookback period (e.g. '60d', '730d', '2y')")
     args = parser.parse_args()
+
+    # Override default timeframe
+    CONFIG.strategy.default_timeframe = args.interval
 
     if args.symbols:
         CONFIG.strategy.underlyings = args.symbols
@@ -480,16 +546,42 @@ def main():
         CONFIG.strategy.universe_type = "static" 
         CONFIG.strategy.screener_type = "static"
 
+    # Context-Aware / Dynamic Ingestion: check if files exist, download if they don't
+    interval = args.interval.strip().lower()
+    from core.universe_manager import UniverseManager
+    universe_manager = UniverseManager(CONFIG)
+    target_universe = universe_manager.get_universe()
+    
+    need_download = False
     if not os.path.exists(args.csv):
-        print(f"❌ File not found: {args.csv}")
-        sys.exit(1)
+        need_download = True
+    else:
+        for sym in target_universe:
+            sym_file = f"data/{interval}/{sym.lower()}.csv"
+            if not os.path.exists(sym_file):
+                need_download = True
+                break
+
+    if need_download:
+        print(f"⚠️ Missing historical data files for interval '{interval}'. Triggering yfinance download...")
+        import subprocess
+        cmd = [sys.executable, "data/download_historical.py", "--lookback", args.lookback, "--interval", interval, "--symbols"] + target_universe
+        print(f"Running command: {' '.join(cmd)}")
+        try:
+            subprocess.run(cmd, check=True)
+        except Exception as e:
+            print(f"❌ Failed to download historical data: {e}")
+            sys.exit(1)
 
     df_data = pd.read_csv(args.csv)
     
     backtester = OptionsBacktester(start_capital=args.capital)
+    
+    # Dynamically resolve DTE based on interval config
+    dte_val = CONFIG.strategy.timeframe_dte_map.get(interval, 30)
     config = {
         "max_concurrent_positions": CONFIG.risk.max_concurrent_positions,
-        "dte": 30
+        "dte": dte_val
     }
     
     report = backtester.run_backtest(df_data, config)
