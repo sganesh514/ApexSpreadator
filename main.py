@@ -2,6 +2,7 @@
 ApexSpreadator Agent — Main Entry Point
 Starts the trading agent loop and web dashboard.
 """
+from core.broker_factory import get_broker
 import asyncio
 import signal
 import sys
@@ -9,15 +10,14 @@ import os
 import threading
 from datetime import datetime, timedelta
 import pandas as pd
-import yfinance as yf
 import uvicorn
+from core.data_loader import get_live_price, get_live_options_chain
 
 from config import CONFIG, AgentConfig
 from models import (
     AgentState, TradeStatus, ExitReason,
     AccountSnapshot, ScannerStatus
 )
-from core.ibkr_broker import IBKRBroker
 from core.strategy import StrategyEngine
 from core.execution import ExecutionEngine
 from core.position_manager import PositionManager
@@ -46,11 +46,8 @@ class ApexSpreadatorAgent:
         self._paused = False
 
         # Initialize components
-        self.broker = IBKRBroker(
-            host=self.config.connection.host,
-            port=self.config.connection.port,
-            client_id=self.config.connection.client_id,
-        )
+        # Initialize components using broker factory
+        self.broker = get_broker(self.config.connection.broker_type, self.config)
         self.risk_manager = RiskManager(self.config)
         self.strategy = StrategyEngine(self.broker, self.config, self.risk_manager)
         self.execution = ExecutionEngine(self.broker, self.config)
@@ -97,24 +94,76 @@ class ApexSpreadatorAgent:
         # Check Ollama availability
         await self.analyst.check_availability()
 
-        # Initialize screener
-        screener = ScreenerEngine(self.config)
-        self._last_screen_time = datetime.now()
-
-        # Initial screen to populate dynamic watchlist on startup
-        logger.info("Running initial ScreenerEngine watchlist population...")
+        # Load and parse active zones from data/active_zones.json
+        import json
+        zones_path = "data/active_zones.json"
+        if not os.path.exists(zones_path):
+            logger.error(f"❌ Active zones file not found at {zones_path}. Please run the offline screener first: `python scripts/run_screener.py`")
+            self.state = AgentState.ERROR
+            return
+        
         try:
-            candidates = screener.get_candidate_list()
-            if candidates:
-                self.config.strategy.underlyings = candidates
-                logger.info(f"Watchlist initialized with volatile assets: {', '.join(candidates)}")
-            else:
-                logger.warning("Screener returned empty list on startup. Using default watchlist.")
-        except Exception as screener_err:
-            logger.error(f"Failed initial watchlist screening: {screener_err}")
+            with open(zones_path, "r") as f:
+                active_zones = json.load(f)
+        except Exception as e:
+            logger.error(f"❌ Failed to parse active zones file: {e}. Please run the offline screener again: `python scripts/run_screener.py`")
+            self.state = AgentState.ERROR
+            return
+            
+        candidates = list(active_zones.keys())
+        if not candidates:
+            logger.error(f"❌ Active zones file at {zones_path} contains no candidates.")
+            self.state = AgentState.ERROR
+            return
+            
+        self.config.strategy.underlyings = candidates
+        logger.info(f"Watchlist initialized from active_zones.json: {', '.join(candidates)}")
 
-        # Seed historical candles for the watchlist to build initial market structure
-        await self._seed_historical_candles()
+        # Initialize the UnderlyingTracker instances explicitly using coordinates loaded from JSON
+        from models import Zone
+        for symbol, data in active_zones.items():
+            tracker = self.strategy.get_tracker(symbol)
+            tracker.bias = data.get("trend_status", "NEUTRAL")
+            
+            # Load demand zones
+            tracker.demand_zones = []
+            for dz in data.get("demand_zones", []):
+                tracker.demand_zones.append(
+                    Zone(
+                        id=dz.get("id", ""),
+                        type="DEMAND",
+                        high=float(dz.get("high", 0.0)),
+                        low=float(dz.get("low", 0.0)),
+                        origin_candle_time=dz.get("origin_candle_time", ""),
+                        is_active=dz.get("is_active", True)
+                    )
+                )
+            
+            # Load supply zones
+            tracker.supply_zones = []
+            for sz in data.get("supply_zones", []):
+                tracker.supply_zones.append(
+                    Zone(
+                        id=sz.get("id", ""),
+                        type="SUPPLY",
+                        high=float(sz.get("high", 0.0)),
+                        low=float(sz.get("low", 0.0)),
+                        origin_candle_time=sz.get("origin_candle_time", ""),
+                        is_active=sz.get("is_active", True)
+                    )
+                )
+            
+            # Load swing points
+            if "swing_highs" in data:
+                tracker.swing_highs = [(idx, val) for idx, val in data["swing_highs"]]
+            if "swing_lows" in data:
+                tracker.swing_lows = [(idx, val) for idx, val in data["swing_lows"]]
+            
+            # Load candles
+            if "candles" in data:
+                tracker.candles = data["candles"]
+                
+            logger.info(f"Initialized tracker for {symbol}: bias={tracker.bias}, demand_zones={len(tracker.demand_zones)}, supply_zones={len(tracker.supply_zones)}")
 
         # Refresh account data
         await self._refresh_account()
@@ -159,35 +208,6 @@ class ApexSpreadatorAgent:
                     scan_counter += 1
                     if scan_counter >= (self.config.schedule.scan_interval_seconds // 5):
                         scan_counter = 0
-
-                        # Check if we should update watchlist (every 30 minutes)
-                        current_sim_time = datetime.now()
-                        if self._last_screen_time is None or (current_sim_time - self._last_screen_time) >= timedelta(minutes=30):
-                            self._last_screen_time = current_sim_time
-
-                            logger.info("Running ScreenerEngine to dynamically update watchlist...")
-                            try:
-                                candidates = screener.get_candidate_list()
-                                if candidates:
-                                    # Identify any new symbols that were not in our watchlist previously
-                                    current_watchlist = set(self.config.strategy.underlyings)
-                                    new_symbols = [s for s in candidates if s not in current_watchlist]
-                                    
-                                    # Dynamically update the watchlist
-                                    self.config.strategy.underlyings = candidates
-                                    logger.info(f"Screener updated watchlist to: {', '.join(candidates)}")
-                                    
-                                    # Seed historical candles for any new symbols
-                                    if new_symbols:
-                                        logger.info(f"Seeding historical candles for newly screened symbols: {', '.join(new_symbols)}")
-                                        for symbol in new_symbols:
-                                            # Run asynchronously without blocking the main loop's processing interval
-                                            asyncio.create_task(self._seed_single_symbol(symbol))
-                                else:
-                                    logger.warning("Screener returned no volatile assets. Watchlist unchanged.")
-                            except Exception as screener_err:
-                                logger.error(f"Error running ScreenerEngine: {screener_err}", exc_info=True)
-
                         await self._run_scan()
 
                     # Broadcast updates to dashboard
@@ -208,51 +228,8 @@ class ApexSpreadatorAgent:
 
         await self._shutdown()
 
-    async def _seed_single_symbol(self, symbol: str):
-        """Fetch past 60 days of daily historical candles from yfinance for a single symbol to build zones and bias."""
-        try:
-            end_dt = datetime.now()
-            start_dt = end_dt - timedelta(days=60)
-            
-            def fetch_data():
-                ticker = yf.Ticker(symbol)
-                return ticker.history(start=start_dt.strftime("%Y-%m-%d"), end=end_dt.strftime("%Y-%m-%d"), interval="1d")
-                
-            df = await asyncio.to_thread(fetch_data)
-            if df.empty:
-                logger.warning(f"No historical data seeded for {symbol}")
-                return
-            
-            df = df.reset_index()
-            tracker = self.strategy.get_tracker(symbol)
-            
-            for _, row in df.iterrows():
-                timestamp = row["Date"].strftime("%Y-%m-%d")
-                # Check if already in tracker
-                if tracker.candles and tracker.candles[-1]["time"] >= timestamp:
-                    continue
-                
-                tracker.add_candle(
-                    open_p=row["Open"],
-                    high_p=row["High"],
-                    low_p=row["Low"],
-                    close_p=row["Close"],
-                    volume=row["Volume"],
-                    timestamp=timestamp,
-                    iv=0.18
-                )
-            logger.info(f"✅ Seeded {len(tracker.candles)} candles for {symbol}. Bias: {tracker.bias}")
-        except Exception as e:
-            logger.error(f"Error seeding historical candles for {symbol}: {e}", exc_info=True)
-
-    async def _seed_historical_candles(self):
-        """Fetch past 60 days of daily historical candles from yfinance to build zones and bias for watchlist."""
-        logger.info("Seeding historical candles for watchlist symbols...")
-        tasks = [self._seed_single_symbol(symbol) for symbol in self.config.strategy.underlyings]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
     async def _run_scan(self):
-        """Execute a single scan cycle by fetching the latest daily bars and feeding them to trackers."""
+        """Execute a single scan cycle by fetching the latest live prices and feeding them to trackers."""
         self._scanner_status.is_scanning = True
         self._last_scan_time = now_iso()
 
@@ -261,53 +238,37 @@ class ApexSpreadatorAgent:
             await self._refresh_account()
 
             for symbol in self.config.strategy.underlyings:
-                ticker = yf.Ticker(symbol)
-                # Fetch latest 5 days to ensure we get the latest daily candle
-                df = ticker.history(period="5d", interval="1d").reset_index()
-                if df.empty:
+                price = await get_live_price(symbol, self.broker)
+                if price <= 0:
                     continue
-                
-                # Feed the latest row(s) to tracker
-                tracker = self.strategy.get_tracker(symbol)
                 
                 # Fetch live/mid option IV if available from VIX or index
                 vix_val = 18.0
                 try:
-                    vix_val = await self.broker.get_underlying_price("^VIX")
+                    vix_val = await get_live_price("^VIX", self.broker)
                     if vix_val <= 0:
                         vix_val = 18.0
                 except Exception:
                     pass
                 iv_val = vix_val / 100.0
 
-                for _, row in df.iterrows():
-                    timestamp = row["Date"].strftime("%Y-%m-%d")
-                    
-                    # Avoid duplicates
-                    if tracker.candles and tracker.candles[-1]["time"] >= timestamp:
-                        # Update the last candle with latest close price if it is the current day
-                        if tracker.candles[-1]["time"] == timestamp:
-                            tracker.candles[-1]["close"] = row["Close"]
-                            tracker.candles[-1]["high"] = max(tracker.candles[-1]["high"], row["High"])
-                            tracker.candles[-1]["low"] = min(tracker.candles[-1]["low"], row["Low"])
-                            tracker.candles[-1]["volume"] = row["Volume"]
-                        continue
+                today_str = datetime.now().strftime("%Y-%m-%d")
 
-                    # If it's a new day candle, add it
-                    opp = self.strategy.add_bar(
-                        symbol=symbol,
-                        open_p=row["Open"],
-                        high_p=row["High"],
-                        low_p=row["Low"],
-                        close_p=row["Close"],
-                        volume=row["Volume"],
-                        timestamp=timestamp,
-                        iv=iv_val
-                    )
+                # Feed the latest price to the tracker (StrategyEngine.add_bar handles same-day vs new-day)
+                opp = self.strategy.add_bar(
+                    symbol=symbol,
+                    open_p=price,
+                    high_p=price,
+                    low_p=price,
+                    close_p=price,
+                    volume=0.0,
+                    timestamp=today_str,
+                    iv=iv_val
+                )
 
-                    if opp:
-                        # Trade signal generated! Let's check entry approval
-                        await self._try_enter_trade(opp)
+                if opp:
+                    # Trade signal generated! Let's check entry approval
+                    await self._try_enter_trade(opp)
 
         except Exception as e:
             logger.error(f"Scan error: {e}", exc_info=True)
@@ -339,8 +300,9 @@ class ApexSpreadatorAgent:
         options_chain = None
         try:
             dte = opportunity.spread.long_leg.dte
-            options_chain = await self.broker.get_options_chain(
+            options_chain = await get_live_options_chain(
                 symbol=opportunity.symbol,
+                broker=self.broker,
                 right=opportunity.spread.right,
                 min_dte=max(0, dte - 5),
                 max_dte=dte + 5
@@ -590,21 +552,36 @@ def main():
 
     os.makedirs("data", exist_ok=True)
 
-    # Parse command line args
-    port = CONFIG.connection.port
-    dashboard_port = CONFIG.dashboard.port
+    import argparse
+    parser = argparse.ArgumentParser(description="ApexSpreadator Agent")
+    parser.add_argument(
+        "--broker",
+        type=str,
+        default=CONFIG.connection.broker_type,
+        help="Broker to switch to (ibkr or moomoo)"
+    )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Run in live trading mode instead of paper/simulated"
+    )
+    parser.add_argument(
+        "--dashboard-port",
+        type=int,
+        default=CONFIG.dashboard.port,
+        help="Port for running the FastAPI web dashboard"
+    )
+    args = parser.parse_args()
 
-    if "--live" in sys.argv:
-        CONFIG.connection.port = 7496
-        port = 7496
+    # Apply options to configuration
+    CONFIG.connection.broker_type = args.broker
+    dashboard_port = args.dashboard_port
+
+    if args.live:
         logger_main.warning("🔴 LIVE TRADING MODE — Real money at risk!")
     else:
-        logger_main.info("📄 Paper trading mode (port 7497)")
-
-    if "--dashboard-port" in sys.argv:
-        idx = sys.argv.index("--dashboard-port")
-        if idx + 1 < len(sys.argv):
-            dashboard_port = int(sys.argv[idx + 1])
+        display_port = 7497 if args.broker.lower() == "ibkr" else 11111
+        logger_main.info(f"📄 Paper trading mode (broker: {args.broker.upper()}, port {display_port})")
 
     # Create the agent
     agent = ApexSpreadatorAgent(CONFIG)

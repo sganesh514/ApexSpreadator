@@ -39,9 +39,25 @@ class StrategyEngine:
     def add_bar(self, symbol: str, open_p: float, high_p: float, low_p: float, close_p: float, volume: float, timestamp: str, iv: float = 0.18) -> Optional[Opportunity]:
         """
         Ingest a new price bar and check if it triggers a vertical spread opportunity.
+        Handles same-day updates and new day additions.
         """
         tracker = self.get_tracker(symbol)
-        signal = tracker.add_candle(open_p, high_p, low_p, close_p, volume, timestamp, iv)
+        
+        # Check if same day update
+        if tracker.candles and tracker.candles[-1]["time"] == timestamp:
+            last_candle = tracker.candles[-1]
+            last_candle["close"] = close_p
+            last_candle["high"] = max(last_candle["high"], high_p)
+            last_candle["low"] = min(last_candle["low"], low_p)
+            last_candle["volume"] = volume
+            
+            # Check zone invalidations on close
+            tracker._check_zone_invalidations(close_p)
+            
+            # Check for retests
+            signal = tracker._check_zone_retests(last_candle)
+        else:
+            signal = tracker.add_candle(open_p, high_p, low_p, close_p, volume, timestamp, iv)
 
         if not signal:
             return None

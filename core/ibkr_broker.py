@@ -7,7 +7,7 @@ from typing import List, Dict, Optional, Any, Callable
 from datetime import datetime
 
 from utils import get_logger, calculate_dte
-from core.broker_base import BrokerBase
+from core.broker_interface import BrokerBase
 
 logger = get_logger("IBKR")
 
@@ -548,3 +548,21 @@ class IBKRBroker(BrokerBase):
     def ib(self):
         """Direct access to ib_insync IB instance for advanced usage."""
         return self._ib
+
+    async def get_account_balance(self) -> float:
+        """Get the account cash balance."""
+        summary = await self.get_account_summary()
+        return summary.get("balance", 0.0)
+
+    async def place_order(self, order_data: Dict[str, Any]) -> int:
+        """Place an order using spread description dictionary."""
+        return await self.place_vertical_spread(
+            symbol=order_data.get("symbol"),
+            long_strike=order_data.get("long_strike"),
+            short_strike=order_data.get("short_strike"),
+            right=order_data.get("right"),
+            expiration=order_data.get("expiration"),
+            quantity=order_data.get("quantity"),
+            limit_price=order_data.get("limit_price"),
+            action=order_data.get("action", "BUY"),
+        )
