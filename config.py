@@ -31,8 +31,12 @@ class StrategyConfig:
     # Watchlist
     underlyings: List[str] = field(default_factory=lambda: ["SPY", "QQQ"])
 
-    # Universe selection settings
-    universe_type: str = "static"          # "static", "sp500", or "nasdaq100"
+    # Dynamic Screener settings
+    screener_type: str = "static"          # "static", "sp500", or "nasdaq100"
+
+
+    screener_limit: int = 5                # Number of top dynamic candidates to track
+    screener_min_volume: int = 500000      # Minimum average volume (shares)
 
     # Timeframe and DTE selection mapping (timeframe -> option DTE)
     timeframe_dte_map: Dict[str, int] = field(default_factory=lambda: {
@@ -40,7 +44,7 @@ class StrategyConfig:
         "1h": 7,      # 1-Hour chart -> 7 DTE
         "15m": 3,     # 15-Min chart -> 3 DTE
     })
-    default_timeframe: str = "1d"
+    default_timeframe: str = "1h"
 
     # Swing Point Extrema Window Size (N bars on each side)
     fractal_window: int = 3
