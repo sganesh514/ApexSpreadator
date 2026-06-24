@@ -261,12 +261,6 @@ class StrategyEngine:
             logger.info(msg)
             return True, ExitReason.TIME_EXIT, msg
 
-        # Check Premium Stop-Loss (50% max loss of initial debit)
-        if position.unrealized_pnl_pct <= -0.50:
-            msg = f"Premium Stop-Loss: Option value dropped by {position.unrealized_pnl_pct*100:.1f}%"
-            logger.warning(msg)
-            return True, ExitReason.STOP_LOSS, msg
-
         is_call = (spread.right == "C")
         tp_level = position.take_profit_price
         sl_level = position.invalidation_price
