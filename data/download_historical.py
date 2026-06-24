@@ -14,10 +14,10 @@ import yfinance as yf
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-def download_symbol(symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
-    print(f"Downloading price history for {symbol}...")
+def download_symbol(symbol: str, start_date: str, end_date: str, interval: str = "1d") -> pd.DataFrame:
+    print(f"Downloading price history for {symbol} (interval: {interval})...")
     ticker = yf.Ticker(symbol)
-    df = ticker.history(start=start_date, end=end_date, interval="1d")
+    df = ticker.history(start=start_date, end=end_date, interval=interval)
     if df.empty:
         raise ValueError(f"No data returned for {symbol}")
     return df
@@ -25,7 +25,8 @@ def download_symbol(symbol: str, start_date: str, end_date: str) -> pd.DataFrame
 def main():
     parser = argparse.ArgumentParser(description="ApexSpreadator — Historical Data Downloader")
     parser.add_argument("--symbols", nargs="+", default=["SPY", "QQQ"], help="Symbols to download")
-    parser.add_argument("--years", type=int, default=3, help="Years of data to download")
+    parser.add_argument("--days", type=int, default=1095, help="Days of data to download")
+    parser.add_argument("--interval", choices=['15m', '1h', '1d'], default="1d", help="Data interval")
     args = parser.parse_args()
 
     print("============================================================")
@@ -34,22 +35,23 @@ def main():
 
     # Date range
     end_dt = datetime.now()
-    start_dt = end_dt - timedelta(days=args.years * 365)
+    start_dt = end_dt - timedelta(days=args.days)
     start_date = start_dt.strftime("%Y-%m-%d")
     end_date = end_dt.strftime("%Y-%m-%d")
 
-    print(f"  Period: {start_date} -> {end_date} ({args.years} years)")
+    print(f"  Period: {start_date} -> {end_date} ({args.days} days, interval: {args.interval})")
     print(f"  Symbols: {', '.join(args.symbols)}")
     print("============================================================")
 
-    os.makedirs("data", exist_ok=True)
+    data_dir = os.path.join("data", args.interval)
+    os.makedirs(data_dir, exist_ok=True)
 
-    # 1. Download VIX data first for general IV proxy and saving baseline vix_daily.csv
+    # 1. Download VIX data first for general IV proxy and saving baseline vix_data.csv
     print("Downloading VIX index data...")
     try:
-        vix_df = download_symbol("^VIX", start_date, end_date)
+        vix_df = download_symbol("^VIX", start_date, end_date, args.interval)
         vix_df = vix_df[["Close"]].rename(columns={"Close": "VIX"})
-        vix_df.to_csv("data/vix_daily.csv")
+        vix_df.to_csv(os.path.join(data_dir, "vix_data.csv"))
         print("VIX data downloaded successfully.")
     except Exception as e:
         print(f"Error downloading VIX: {e}")
@@ -66,7 +68,7 @@ def main():
 
     for symbol in args.symbols:
         try:
-            df = download_symbol(symbol, start_date, end_date)
+            df = download_symbol(symbol, start_date, end_date, args.interval)
             
             # Reset index to make Date a column
             df = df.reset_index()
@@ -82,7 +84,7 @@ def main():
             print(f"Downloading volatility index {vol_symbol} for {symbol}...")
             
             try:
-                vol_df = download_symbol(vol_symbol, start_date, end_date)
+                vol_df = download_symbol(vol_symbol, start_date, end_date, args.interval)
                 vol_df = vol_df[["Close"]].rename(columns={"Close": "VolIndex"})
                 vol_series = vol_df["VolIndex"].reindex(df.index, method="ffill")
                 df["VIX"] = vol_series.values
@@ -101,7 +103,7 @@ def main():
             df["IV"] = df["IV"].fillna(0.18)
             
             # Save individual symbol csv
-            df.to_csv(f"data/{symbol.lower()}_daily.csv")
+            df.to_csv(os.path.join(data_dir, f"{symbol.lower()}_data.csv"))
             
             # For the combined CSV
             df_reset = df.reset_index()
@@ -120,8 +122,9 @@ def main():
     if all_dfs:
         combined_df = pd.concat(all_dfs, ignore_index=True)
         combined_df = combined_df[["Date", "Symbol", "Open", "High", "Low", "Close", "Volume", "VIX", "IV"]]
-        combined_df.to_csv("data/all_symbols_daily.csv", index=False)
-        print(f"\nAll downloads complete! Combined file saved to: data/all_symbols_daily.csv ({len(all_dfs)} symbols succeeded)")
+        combined_file = os.path.join(data_dir, "all_symbols.csv")
+        combined_df.to_csv(combined_file, index=False)
+        print(f"\nAll downloads complete! Combined file saved to: {combined_file} ({len(all_dfs)} symbols succeeded)")
     else:
         print("\n❌ Error: No symbols were successfully downloaded.")
         sys.exit(1)

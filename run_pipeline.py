@@ -70,13 +70,38 @@ def run_command(cmd, desc):
         sys.exit(1)
 
 
+def parse_lookback(lookback_str: str) -> int:
+    lookback_str = lookback_str.lower().strip()
+    if lookback_str.endswith("d"):
+        return int(lookback_str[:-1])
+    elif lookback_str.endswith("y"):
+        return int(lookback_str[:-1]) * 365
+    else:
+        try:
+            return int(lookback_str)
+        except ValueError:
+            raise ValueError(f"Invalid lookback format: {lookback_str}")
+
+def validate_pipeline_config(interval: str, lookback_days: int):
+    if interval == "15m" and lookback_days > 60:
+        raise ValueError("15m interval supports a maximum of 60 days lookback.")
+    if interval == "1h" and lookback_days > 730:
+        raise ValueError("1h interval supports a maximum of 730 days lookback.")
+
 def main():
     parser = argparse.ArgumentParser(description="ApexSpreadator — Pipeline runner")
     parser.add_argument(
-        "--years",
-        type=int,
-        default=3,
-        help="Number of years of history to backtest (default: 3)"
+        "--lookback",
+        type=str,
+        default="3y",
+        help="Lookback period for data (e.g., '60d', '2y')"
+    )
+    parser.add_argument(
+        "--interval",
+        type=str,
+        default="1d",
+        choices=["15m", "1h", "1d"],
+        help="Data interval to fetch and backtest"
     )
     parser.add_argument(
         "--capital",
@@ -93,19 +118,22 @@ def main():
     )
     args = parser.parse_args()
 
+    lookback_days = parse_lookback(args.lookback)
+    validate_pipeline_config(args.interval, lookback_days)
+
     # 1. Clean the data folder
     clean_data_dir()
 
-    # 2. Refetch the last N years of data for the specified underlyings
+    # 2. Refetch the historical data for the specified underlyings
     symbols_str = ", ".join(args.symbols)
     run_command(
-        [sys.executable, "data/download_historical.py", "--years", str(args.years), "--symbols"] + args.symbols,
-        f"Downloading historical {args.years}-year data for {symbols_str}"
+        [sys.executable, "data/download_historical.py", "--days", str(lookback_days), "--interval", args.interval, "--symbols"] + args.symbols,
+        f"Downloading historical {args.lookback} data ({args.interval}) for {symbols_str}"
     )
 
     # 3. Run the backtest on the newly fetched data
     run_command(
-        [sys.executable, "core/backtester.py", "--csv", "data/all_symbols_daily.csv", "--capital", str(args.capital)],
+        [sys.executable, "core/backtester.py", "--csv", f"data/{args.interval}/all_symbols.csv", "--capital", str(args.capital)],
         f"Running backtest on {symbols_str} with ${args.capital:,.2f} capital"
     )
 

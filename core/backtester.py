@@ -123,7 +123,11 @@ class OptionsBacktester:
 
         # Group records by Date
         df_data = df_data.copy()
-        df_data["Date"] = pd.to_datetime(df_data["Date"], utc=True).dt.strftime("%Y-%m-%d")
+        date_series = pd.to_datetime(df_data["Date"], utc=True)
+        if (date_series.dt.hour != 0).any() or (date_series.dt.minute != 0).any():
+            df_data["Date"] = date_series.dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            df_data["Date"] = date_series.dt.strftime("%Y-%m-%d")
         df_data = df_data.sort_values("Date")
         dates = df_data["Date"].unique()
         symbols = df_data["Symbol"].unique()
@@ -458,7 +462,11 @@ class OptionsBacktester:
 
 def load_csv(path: str) -> Dict[str, pd.DataFrame]:
     df = pd.read_csv(path)
-    df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.strftime("%Y-%m-%d")
+    date_series = pd.to_datetime(df["Date"], utc=True)
+    if (date_series.dt.hour != 0).any() or (date_series.dt.minute != 0).any():
+        df["Date"] = date_series.dt.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        df["Date"] = date_series.dt.strftime("%Y-%m-%d")
     data = {}
     for sym in df["Symbol"].unique():
         data[sym] = df[df["Symbol"] == sym].sort_values("Date")
