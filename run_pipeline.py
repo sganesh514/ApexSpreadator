@@ -23,26 +23,20 @@ except ImportError:
     default_symbols = ["SPY", "QQQ"]
 
 
-def clean_data_dir():
-    print("🧹 Cleaning data directory...")
-    data_dir = "data"
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
+def clean_data_dir(interval: str):
+    print(f"🧹 Cleaning data/{interval} directory...")
+    interval_dir = os.path.join("data", interval)
+    if not os.path.exists(interval_dir):
         return
 
-    for item in os.listdir(data_dir):
-        item_path = os.path.join(data_dir, item)
-        # Keep critical persistence files, logs, and download script
-        if item in ["download_historical.py", "learning_state.json", "journal.json", "agent.log", "symbol_analysis_results.json"]:
-            continue
-        try:
-            if os.path.isfile(item_path) or os.path.islink(item_path):
+    for item in os.listdir(interval_dir):
+        if item.endswith(".csv"):
+            item_path = os.path.join(interval_dir, item)
+            try:
                 os.unlink(item_path)
-            elif os.path.isdir(item_path):
-                shutil.rmtree(item_path)
-            print(f"  Removed: {item}")
-        except Exception as e:
-            print(f"  ❌ Failed to delete {item}: {e}")
+                print(f"  Removed: {item}")
+            except Exception as e:
+                print(f"  ❌ Failed to delete {item}: {e}")
 
 
 def run_command(cmd, desc):
@@ -122,7 +116,7 @@ def main():
     validate_pipeline_config(args.interval, lookback_days)
 
     # 1. Clean the data folder
-    clean_data_dir()
+    clean_data_dir(args.interval)
 
     # 2. Refetch the historical data for the specified underlyings
     symbols_str = ", ".join(args.symbols)

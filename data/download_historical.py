@@ -75,6 +75,12 @@ def main():
             # Clean column names
             df.columns = [c.strip() for c in df.columns]
             
+            if "Datetime" in df.columns:
+                df.rename(columns={"Datetime": "Date"}, inplace=True)
+                
+            if "Date" not in df.columns:
+                raise ValueError(f"'Date' column not found for {symbol}")
+            
             # Select required columns
             df = df[["Date", "Open", "High", "Low", "Close", "Volume"]]
             
