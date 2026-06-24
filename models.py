@@ -83,6 +83,12 @@ class VerticalSpread:
     reward: float = 0.0         # Max Reward = Width - Net Debit
     rr_ratio: float = 0.0       # Reward/Risk ratio (must be >= 2.5)
 
+    def __post_init__(self):
+        if not self.expiration:
+            from utils import get_next_valid_trading_day, now_et
+            dte = self.long_leg.dte if self.long_leg else 30
+            self.expiration = get_next_valid_trading_day(now_et().replace(tzinfo=None), dte)
+
     @property
     def width(self) -> float:
         if self.long_leg and self.short_leg:

@@ -123,7 +123,7 @@ class OptionsBacktester:
 
         # Group records by Date
         df_data = df_data.copy()
-        date_series = pd.to_datetime(df_data["Date"], utc=True)
+        date_series = pd.to_datetime(df_data["Date"])
         if (date_series.dt.hour != 0).any() or (date_series.dt.minute != 0).any():
             df_data["Date"] = date_series.dt.strftime("%Y-%m-%d %H:%M:%S")
         else:
@@ -462,7 +462,7 @@ class OptionsBacktester:
 
 def load_csv(path: str) -> Dict[str, pd.DataFrame]:
     df = pd.read_csv(path)
-    date_series = pd.to_datetime(df["Date"], utc=True)
+    date_series = pd.to_datetime(df["Date"])
     if (date_series.dt.hour != 0).any() or (date_series.dt.minute != 0).any():
         df["Date"] = date_series.dt.strftime("%Y-%m-%d %H:%M:%S")
     else:

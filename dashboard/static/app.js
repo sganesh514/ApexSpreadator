@@ -426,13 +426,25 @@ function formatPnl(amount) {
 }
 
 function formatExpiration(exp) {
-    if (!exp || exp.length < 8) return exp || '?';
-    try {
-        const d = new Date(exp.substring(0, 4), parseInt(exp.substring(4, 6)) - 1, exp.substring(6, 8));
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    } catch {
-        return exp;
+    if (!exp) return '?';
+    // If it contains dashes, parse directly
+    if (exp.includes('-')) {
+        const parts = exp.split('-');
+        if (parts.length === 3) {
+            const d = new Date(parts[0], parseInt(parts[1]) - 1, parts[2]);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
     }
+    // Fallback for YYYYMMDD
+    if (exp.length >= 8) {
+        try {
+            const d = new Date(exp.substring(0, 4), parseInt(exp.substring(4, 6)) - 1, exp.substring(6, 8));
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        } catch {
+            return exp;
+        }
+    }
+    return exp;
 }
 
 function formatExitReason(reason) {

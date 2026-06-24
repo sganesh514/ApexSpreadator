@@ -98,13 +98,24 @@ def trading_days_remaining_in_month() -> int:
 
 
 def calculate_dte(expiration: str) -> int:
-    """Calculate days to expiration from YYYYMMDD string."""
+    """Calculate days to expiration from YYYY-MM-DD or YYYYMMDD string."""
     try:
-        exp_date = datetime.strptime(expiration, "%Y%m%d").replace(tzinfo=ET)
+        fmt = "%Y-%m-%d" if "-" in expiration else "%Y%m%d"
+        exp_date = datetime.strptime(expiration, fmt).replace(tzinfo=ET)
         current = now_et().replace(hour=0, minute=0, second=0, microsecond=0)
         return max(0, (exp_date - current).days)
     except Exception:
         return 0
+
+
+def get_next_valid_trading_day(start_date: datetime, dte: int) -> str:
+    """Get the next valid trading day at least `dte` days away."""
+    import pandas as pd
+    from pandas.tseries.offsets import CustomBusinessDay
+    
+    bday = CustomBusinessDay()
+    target_date = start_date + dte * bday
+    return target_date.strftime("%Y-%m-%d")
 
 
 def format_currency(amount: float) -> str:
