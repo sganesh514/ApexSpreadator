@@ -99,18 +99,24 @@ class OptionsBacktester:
         self.equity_curve: List[Tuple[str, float]] = []
         self.monthly_pnl: Dict[str, float] = {}
         
-        # Initialize strategy in backtest mode
-        self.strategy = StrategyEngine(broker=None, config=CONFIG, risk_manager=None)
-        
-        # Initialize screener for dynamic watchlist simulation
-        from core.screener import ScreenerEngine
-        self.screener = ScreenerEngine(CONFIG)
+        # Strategy and screener will be initialized in run_backtest with runtime config
 
 
-    def run_backtest(self, df_data: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
+    def run_backtest(self, df_data: pd.DataFrame, config: Dict[str, Any], interval: str = '1d') -> Dict[str, Any]:
         """
         Run backtest simulation.
         """
+        import copy
+        from config import CONFIG
+        
+        runtime_config = copy.deepcopy(CONFIG)
+        runtime_config.strategy.default_timeframe = interval
+        
+        # Initialize strategy and screener with runtime config
+        self.strategy = StrategyEngine(broker=None, config=runtime_config, risk_manager=None)
+        from core.screener import ScreenerEngine
+        self.screener = ScreenerEngine(runtime_config)
+        
         logger.info(f"Starting historical backtest with starting capital of ${self.start_capital:,.2f}...")
         
         self.capital = self.start_capital
@@ -123,7 +129,9 @@ class OptionsBacktester:
 
         # Group records by Date
         df_data = df_data.copy()
-        date_series = pd.to_datetime(df_data["Date"])
+        from utils import to_naive_datetime
+        date_series = to_naive_datetime(df_data["Date"])
+        df_data["Date"] = date_series
         if (date_series.dt.hour != 0).any() or (date_series.dt.minute != 0).any():
             df_data["Date"] = date_series.dt.strftime("%Y-%m-%d %H:%M:%S")
         else:
@@ -462,7 +470,9 @@ class OptionsBacktester:
 
 def load_csv(path: str) -> Dict[str, pd.DataFrame]:
     df = pd.read_csv(path)
-    date_series = pd.to_datetime(df["Date"])
+    from utils import to_naive_datetime
+    date_series = to_naive_datetime(df["Date"])
+    df["Date"] = date_series
     if (date_series.dt.hour != 0).any() or (date_series.dt.minute != 0).any():
         df["Date"] = date_series.dt.strftime("%Y-%m-%d %H:%M:%S")
     else:
@@ -478,6 +488,7 @@ def main():
     parser = argparse.ArgumentParser(description="ApexSpreadator Backtesting Engine")
     parser.add_argument("--csv", type=str, required=True, help="Path to historical daily CSV")
     parser.add_argument("--capital", type=float, default=25000.0, help="Starting capital")
+    parser.add_argument("--interval", type=str, default="1d", help="Data interval for runtime config")
     args = parser.parse_args()
 
     if not os.path.exists(args.csv):
@@ -492,7 +503,7 @@ def main():
         "dte": 30
     }
     
-    report = backtester.run_backtest(df_data, config)
+    report = backtester.run_backtest(df_data, config, interval=args.interval)
 
     # ── Print Results ────────────────────────────────────────────
     print()

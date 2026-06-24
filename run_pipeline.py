@@ -127,7 +127,7 @@ def main():
 
     # 3. Run the backtest on the newly fetched data
     run_command(
-        [sys.executable, "core/backtester.py", "--csv", f"data/{args.interval}/all_symbols.csv", "--capital", str(args.capital)],
+        [sys.executable, "core/backtester.py", "--csv", f"data/{args.interval}/all_symbols.csv", "--capital", str(args.capital), "--interval", args.interval],
         f"Running backtest on {symbols_str} with ${args.capital:,.2f} capital"
     )
 

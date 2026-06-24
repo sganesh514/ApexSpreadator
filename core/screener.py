@@ -117,7 +117,8 @@ class ScreenerEngine:
                     if not hasattr(self, "_cached_archive_df") or self._cached_archive_df is None:
                         try:
                             self._cached_archive_df = pd.read_csv(archive_path)
-                            self._cached_archive_df["Date"] = pd.to_datetime(self._cached_archive_df["Date"]).dt.strftime("%Y-%m-%d")
+                            from utils import to_naive_datetime
+                            self._cached_archive_df["Date"] = to_naive_datetime(self._cached_archive_df["Date"]).dt.strftime("%Y-%m-%d")
                         except Exception as e:
                             logger.error(f"Failed to load backtest data archive: {e}")
                             return []
@@ -339,7 +340,8 @@ class ScreenerEngine:
                     "Volume": "Volume"
                 }
                 df = df.rename(columns=rename_map)
-                df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
+                from utils import to_naive_datetime
+                df["Date"] = to_naive_datetime(df["Date"])
                 df = df.dropna(subset=["Open", "High", "Low", "Close", "Volume"])
                 return df
             except Exception as e:

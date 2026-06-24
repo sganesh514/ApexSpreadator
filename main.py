@@ -40,8 +40,11 @@ class ApexSpreadatorAgent:
     The main trading agent that orchestrates all components for ApexSpreadator.
     """
 
-    def __init__(self, config: AgentConfig = None):
-        self.config = config or CONFIG
+    def __init__(self, config: AgentConfig = None, interval: str = "1d"):
+        import copy
+        self.config = copy.deepcopy(config or CONFIG)
+        self.config.strategy.default_timeframe = interval
+        
         self.state = AgentState.STARTING
         self._paused = False
 
@@ -571,6 +574,13 @@ def main():
         default=CONFIG.dashboard.port,
         help="Port for running the FastAPI web dashboard"
     )
+    parser.add_argument(
+        "--interval",
+        type=str,
+        default="1d",
+        choices=["15m", "1h", "1d"],
+        help="Runtime interval to override default timeframe"
+    )
     args = parser.parse_args()
 
     # Apply options to configuration
@@ -584,7 +594,7 @@ def main():
         logger_main.info(f"📄 Paper trading mode (broker: {args.broker.upper()}, port {display_port})")
 
     # Create the agent
-    agent = ApexSpreadatorAgent(CONFIG)
+    agent = ApexSpreadatorAgent(CONFIG, interval=args.interval)
 
     # Start dashboard in a separate thread
     def run_dashboard():

@@ -118,6 +118,20 @@ def get_next_valid_trading_day(start_date: datetime, dte: int) -> str:
     return target_date.strftime("%Y-%m-%d")
 
 
+def to_naive_datetime(series):
+    """Converts series to datetime and forces it to be timezone-naive."""
+    import pandas as pd
+    try:
+        dt = pd.to_datetime(series, utc=False)
+    except Exception:
+        # Fallback for Mixed timezones error
+        dt = pd.to_datetime(series, utc=True)
+        
+    if getattr(dt.dt, "tz", None) is not None:
+        return dt.dt.tz_localize(None)
+    return dt
+
+
 def format_currency(amount: float) -> str:
     """Format a number as currency."""
     if amount >= 0:
