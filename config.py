@@ -25,17 +25,28 @@ class AccountConfig:
     virtual_balance: bool = True  # Track our own limit on top of IBKR's paper balance
 
 
+NASDAQ100_TICKERS = [
+    "AAPL", "MSFT", "AMZN", "GOOG", "GOOGL", "META", "NVDA", "TSLA", "AVGO", "PEP",
+    "COST", "ASML", "CSCO", "TMUS", "ADBE", "TXN", "NFLX", "QCOM", "CMCSA", "AMGN",
+    "INTU", "AMD", "HON", "COP", "AMAT", "IBM", "NOW", "UNP", "LIN", "ISRG",
+    "SPGI", "GE", "DE", "LMT", "SYK", "RTX", "PGR", "ADP", "MDLZ", "BKNG",
+    "REGN", "VRTX", "GILD", "LRCX", "ADI", "MU", "PANW", "SNPS", "CDNS", "KLAC",
+    "MELI", "CHTR", "MAR", "CSX", "ORLY", "CTAS", "NXPI", "MNST", "FTNT", "DXCM",
+    "KDP", "AEP", "ODFL", "PAYX", "KHC", "EXC", "EA", "BIIB", "CTSH", "ROP",
+    "FAST", "VRSK", "CPRT", "PCAR", "WBD", "DDOG", "CRWD", "MCHP", "OXY", "DLTR",
+    "EBAY", "ILMN", "IDXX", "WDAY", "WMB", "FANG", "CSGP", "ALGN", "ANSS", "ZS",
+    "SWKS", "ZM", "DOCU", "CDW"
+]
+
+
 @dataclass
 class StrategyConfig:
     """Market Structure and Vertical Spread strategy parameters."""
     # Watchlist
-    underlyings: List[str] = field(default_factory=lambda: ["SPY", "QQQ"])
+    underlyings: List[str] = field(default_factory=lambda: NASDAQ100_TICKERS)
 
     # Dynamic Screener settings
     screener_type: str = "static"          # "static", "sp500", or "nasdaq100"
-
-
-    screener_limit: int = 5                # Number of top dynamic candidates to track
     screener_min_volume: int = 500000      # Minimum average volume (shares)
 
     # Timeframe and DTE selection mapping (timeframe -> option DTE)

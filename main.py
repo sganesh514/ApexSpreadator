@@ -22,7 +22,6 @@ from core.strategy import StrategyEngine
 from core.execution import ExecutionEngine
 from core.position_manager import PositionManager
 from core.risk_manager import RiskManager
-from core.screener import ScreenerEngine
 from intelligence.learning import LearningEngine
 from intelligence.ollama_analyst import OllamaAnalyst
 from intelligence.journal import TradeJournal
