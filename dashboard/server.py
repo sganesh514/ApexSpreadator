@@ -106,7 +106,7 @@ class DashboardServer:
             """Return list of intervals that have data."""
             data_root = Path(__file__).parent.parent / "data"
             intervals = []
-            for candidate in ["15m", "1d", "1y"]:
+            for candidate in ["15m", "1h", "1d"]:
                 interval_dir = data_root / candidate
                 if interval_dir.is_dir() and (interval_dir / "all_symbols.csv").exists():
                     intervals.append(candidate)

@@ -75,11 +75,14 @@ def main():
         try:
             df = download_symbol(symbol, start_date, end_date, interval=args.interval)
             
-            # Reset index to make Date a column
+            # Reset index to make Date/Datetime a column
             df = df.reset_index()
             # Clean column names
             df.columns = [c.strip() for c in df.columns]
             
+            if "Datetime" in df.columns:
+                df = df.rename(columns={"Datetime": "Date"})
+                
             # Select required columns
             df = df[["Date", "Open", "High", "Low", "Close", "Volume"]]
 

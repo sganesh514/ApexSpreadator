@@ -94,7 +94,7 @@ def main():
     parser.add_argument(
         "--interval",
         type=str,
-        choices=["15m", "1d", "1y"],
+        choices=["15m", "1h", "1d"],
         default="1d",
         help="Data interval (default: 1d)"
     )
@@ -137,6 +137,7 @@ def main():
     run_command(
         [sys.executable, "core/backtester.py",
          "--csv", csv_path,
+         "--interval", interval,
          "--capital", str(args.capital)],
         f"Running backtest on {symbols_str} with ${args.capital:,.2f} capital"
     )

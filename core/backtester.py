@@ -129,9 +129,17 @@ class OptionsBacktester:
         self.monthly_pnl = {}
         self.strategy.selector.risk_filter_logs = []  # Reset selector logs
 
+        # Determine timeframe and intraday status
+        timeframe = CONFIG.strategy.default_timeframe.strip().lower()
+        is_intraday = timeframe in ["15m", "1h", "60m"]
+
         # Group records by Date
         df_data = df_data.copy()
-        df_data["Date"] = pd.to_datetime(df_data["Date"], utc=True).dt.strftime("%Y-%m-%d")
+        if is_intraday:
+            df_data["Date"] = pd.to_datetime(df_data["Date"]).dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            df_data["Date"] = pd.to_datetime(df_data["Date"]).dt.strftime("%Y-%m-%d")
+            
         df_data = df_data.sort_values("Date")
         dates = df_data["Date"].unique()
         symbols = df_data["Symbol"].unique()
@@ -248,7 +256,7 @@ class OptionsBacktester:
             screener_type = getattr(CONFIG.strategy, "screener_type", "static")
             if screener_type != "static":
                 from datetime import datetime, timedelta
-                current_sim_time = datetime.strptime(date_str, "%Y-%m-%d")
+                current_sim_time = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S" if is_intraday else "%Y-%m-%d")
                 
                 if self._last_screen_time is None or (current_sim_time - self._last_screen_time) >= timedelta(minutes=30):
                     self._last_screen_time = current_sim_time
@@ -473,7 +481,12 @@ class OptionsBacktester:
 
 def load_csv(path: str) -> Dict[str, pd.DataFrame]:
     df = pd.read_csv(path)
-    df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.strftime("%Y-%m-%d")
+    timeframe = CONFIG.strategy.default_timeframe.strip().lower()
+    is_intraday = timeframe in ["15m", "1h", "60m"]
+    if is_intraday:
+        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
     data = {}
     for sym in df["Symbol"].unique():
         data[sym] = df[df["Symbol"] == sym].sort_values("Date")
@@ -483,20 +496,26 @@ def load_csv(path: str) -> Dict[str, pd.DataFrame]:
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="ApexSpreadator Backtesting Engine")
-    parser.add_argument("--csv", type=str, required=True, help="Path to historical daily CSV")
+    parser.add_argument("--csv", type=str, required=True, help="Path to combined CSV")
     parser.add_argument("--capital", type=float, default=25000.0, help="Starting capital")
+    parser.add_argument("--interval", type=str, default="1d", help="Data interval (15m, 1h, 1d)")
     args = parser.parse_args()
 
     if not os.path.exists(args.csv):
         print(f"❌ File not found: {args.csv}")
         sys.exit(1)
 
+    interval = args.interval.strip().lower()
+    CONFIG.strategy.default_timeframe = interval
+
     df_data = pd.read_csv(args.csv)
     
     backtester = OptionsBacktester(start_capital=args.capital)
+    
+    dte_val = CONFIG.strategy.timeframe_dte_map.get(interval, 30)
     config = {
         "max_concurrent_positions": CONFIG.risk.max_concurrent_positions,
-        "dte": 30
+        "dte": dte_val
     }
     
     report = backtester.run_backtest(df_data, config)
