@@ -22,6 +22,31 @@ if hasattr(sys.stderr, 'reconfigure'):
 ET = ZoneInfo("America/New_York")
 
 
+def str_to_date(date_str: str) -> datetime:
+    """Parse a date string into a naive datetime object.
+    Supports: 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM:SS', 'YYYYMMDD'."""
+    date_str = str(date_str).strip()
+    # Try YYYY-MM-DD HH:MM:SS
+    if len(date_str) >= 19 and '-' in date_str:
+        try:
+            return datetime.strptime(date_str[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pass
+    # Try YYYY-MM-DD
+    if len(date_str) >= 10 and '-' in date_str:
+        try:
+            return datetime.strptime(date_str[:10], "%Y-%m-%d")
+        except ValueError:
+            pass
+    # Try YYYYMMDD
+    if len(date_str) >= 8 and '-' not in date_str[:8]:
+        try:
+            return datetime.strptime(date_str[:8], "%Y%m%d")
+        except ValueError:
+            pass
+    raise ValueError(f"Cannot parse date string: '{date_str}'")
+
+
 def setup_logging(level: int = logging.INFO) -> logging.Logger:
     """Configure logging for the agent."""
     logger = logging.getLogger("ApexSpreadator")

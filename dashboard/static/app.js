@@ -200,23 +200,26 @@ function updateHistory(data) {
 
     const sorted = [...data].reverse();
     body.innerHTML = sorted.map(trade => {
-        const pnl = trade.realized_pnl || 0;
-        const pnlPct = trade.realized_pnl_pct || 0;
+        const pnl = trade.realized_pnl || trade.pnl || 0;
+        const pnlPct = trade.realized_pnl_pct || trade.pnl_pct || 0;
         const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-        const date = trade.exit_time ? new Date(trade.exit_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '--';
+        const exitTime = trade.exit_time || trade.exit_date || '';
+        const date = exitTime ? new Date(exitTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '--';
         const exp = formatExpiration(trade.expiration || '');
-        const typeStr = trade.right === 'C' ? 'Bull Call' : 'Bear Put';
+        const right = trade.right || 'C';
+        const typeStr = right === 'C' ? 'Bull Call' : 'Bear Put';
+        const exitReason = trade.exit_reason || trade.reason || '';
 
         return `
             <tr>
                 <td>${date}</td>
-                <td style="font-weight: 600;">${trade.symbol}</td>
-                <td>${trade.long_strike}/${trade.short_strike} ${typeStr} (${exp})</td>
+                <td style="font-weight: 600;">${trade.symbol || '--'}</td>
+                <td>${trade.long_strike || '?'}/${trade.short_strike || '?'} ${typeStr} (${exp})</td>
                 <td>${formatCurrency(trade.entry_price)}</td>
                 <td>${formatCurrency(trade.exit_price)}</td>
                 <td class="${pnlClass}">${formatPnl(pnl)}</td>
                 <td class="${pnlClass}">${(pnlPct * 100).toFixed(1)}%</td>
-                <td style="color: var(--text-secondary); font-size: 0.75rem;">${formatExitReason(trade.exit_reason)}</td>
+                <td style="color: var(--text-secondary); font-size: 0.75rem;">${formatExitReason(exitReason)}</td>
             </tr>`;
     }).join('');
 }
@@ -426,10 +429,19 @@ function formatPnl(amount) {
 }
 
 function formatExpiration(exp) {
-    if (!exp || exp.length < 8) return exp || '?';
+    if (!exp || exp === '?' || exp.length < 8) return exp || '?';
     try {
-        const d = new Date(exp.substring(0, 4), parseInt(exp.substring(4, 6)) - 1, exp.substring(6, 8));
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        // Handle YYYYMMDD format
+        if (/^\d{8}$/.test(exp)) {
+            const d = new Date(exp.substring(0, 4), parseInt(exp.substring(4, 6)) - 1, exp.substring(6, 8));
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        // Handle YYYY-MM-DD format
+        if (/^\d{4}-\d{2}-\d{2}/.test(exp)) {
+            const d = new Date(exp);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        return exp;
     } catch {
         return exp;
     }

@@ -1,6 +1,6 @@
 """
 ApexSpreadator — Pipeline runner
-Cleans the data directory, downloads historical data for SPY, QQQ,
+Cleans the interval-specific data directory, downloads historical data,
 runs the backtester, and bootstraps the learning agent.
 """
 import os
@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import argparse
+import re
 
 # Configure stdout encoding to avoid Windows console errors
 if hasattr(sys.stdout, 'reconfigure'):
@@ -23,26 +24,38 @@ except ImportError:
     default_symbols = ["SPY", "QQQ"]
 
 
-def clean_data_dir():
-    print("🧹 Cleaning data directory...")
-    data_dir = "data"
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
+def parse_lookback(lookback_str: str) -> int:
+    """Parse lookback string like '60d', '2y', '1y' into total integer days."""
+    lookback_str = lookback_str.strip().lower()
+    match = re.match(r'^(\d+)\s*([dy])$', lookback_str)
+    if not match:
+        raise ValueError(f"Invalid lookback format '{lookback_str}'. Use e.g. '60d', '2y'.")
+    value = int(match.group(1))
+    unit = match.group(2)
+    if unit == 'y':
+        return value * 365
+    return value
+
+
+def clean_interval_dir(interval: str):
+    """Clean only the specific data/{interval}/ folder, preserving root data/ files."""
+    interval_dir = os.path.join("data", interval)
+    if not os.path.exists(interval_dir):
+        os.makedirs(interval_dir, exist_ok=True)
+        print(f"🧹 Created data/{interval}/ directory.")
         return
 
-    for item in os.listdir(data_dir):
-        item_path = os.path.join(data_dir, item)
-        # Keep critical persistence files, logs, and download script
-        if item in ["download_historical.py", "learning_state.json", "journal.json", "agent.log", "symbol_analysis_results.json"]:
-            continue
+    print(f"🧹 Cleaning data/{interval}/ directory...")
+    for item in os.listdir(interval_dir):
+        item_path = os.path.join(interval_dir, item)
         try:
             if os.path.isfile(item_path) or os.path.islink(item_path):
                 os.unlink(item_path)
             elif os.path.isdir(item_path):
                 shutil.rmtree(item_path)
-            print(f"  Removed: {item}")
+            print(f"  Removed: {interval}/{item}")
         except Exception as e:
-            print(f"  ❌ Failed to delete {item}: {e}")
+            print(f"  ❌ Failed to delete {interval}/{item}: {e}")
 
 
 def run_command(cmd, desc):
@@ -73,10 +86,17 @@ def run_command(cmd, desc):
 def main():
     parser = argparse.ArgumentParser(description="ApexSpreadator — Pipeline runner")
     parser.add_argument(
-        "--years",
-        type=int,
-        default=3,
-        help="Number of years of history to backtest (default: 3)"
+        "--lookback",
+        type=str,
+        default="2y",
+        help="Lookback period, e.g. '60d', '2y' (default: 2y)"
+    )
+    parser.add_argument(
+        "--interval",
+        type=str,
+        choices=["15m", "1h", "1d"],
+        default="1d",
+        help="Data interval (default: 1d)"
     )
     parser.add_argument(
         "--capital",
@@ -93,19 +113,32 @@ def main():
     )
     args = parser.parse_args()
 
-    # 1. Clean the data folder
-    clean_data_dir()
+    # Parse lookback into integer days
+    lookback_days = parse_lookback(args.lookback)
+    interval = args.interval
 
-    # 2. Refetch the last N years of data for the specified underlyings
+    # Paths
+    csv_path = f"data/{interval}/all_symbols.csv"
+
+    # 1. Clean only the interval-specific folder
+    clean_interval_dir(interval)
+
+    # 2. Download historical data into data/{interval}/
     symbols_str = ", ".join(args.symbols)
     run_command(
-        [sys.executable, "data/download_historical.py", "--years", str(args.years), "--symbols"] + args.symbols,
-        f"Downloading historical {args.years}-year data for {symbols_str}"
+        [sys.executable, "data/download_historical.py",
+         "--lookback", str(lookback_days),
+         "--interval", interval,
+         "--symbols"] + args.symbols,
+        f"Downloading {args.lookback} of {interval} data for {symbols_str}"
     )
 
     # 3. Run the backtest on the newly fetched data
     run_command(
-        [sys.executable, "core/backtester.py", "--csv", "data/all_symbols_daily.csv", "--capital", str(args.capital)],
+        [sys.executable, "core/backtester.py",
+         "--csv", csv_path,
+         "--interval", interval,
+         "--capital", str(args.capital)],
         f"Running backtest on {symbols_str} with ${args.capital:,.2f} capital"
     )
 
