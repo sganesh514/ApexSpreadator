@@ -252,7 +252,7 @@ function updateMarketStructure(data) {
 
     // Update proximity
     const prox = data.proximity_pct !== undefined ? `${(data.proximity_pct * 100).toFixed(2)}%` : 'No active zones';
-    const closest = data.closest_zone ? ` (${data.closest_zone.type} zone at ${data.closest_zone.high.toFixed(2)})` : '';
+    const closest = data.closest_zone ? ` (${data.closest_zone.type} zone at ${data.closest_zone.high.toFixed(2)} on ${data.closest_zone.symbol})` : '';
     document.getElementById('zoneProximity').textContent = `${prox}${closest}`;
 
     // Update active zones table
@@ -261,7 +261,7 @@ function updateMarketStructure(data) {
     if (zones.length === 0) {
         zonesBody.innerHTML = `
             <tr>
-                <td colspan="4" style="text-align: center; color: var(--text-muted);">No active zones mapped</td>
+                <td colspan="5" style="text-align: center; color: var(--text-muted);">No active zones mapped</td>
             </tr>`;
     } else {
         zonesBody.innerHTML = zones.map(z => {
@@ -269,6 +269,7 @@ function updateMarketStructure(data) {
             const typeClass = z.type === 'DEMAND' ? 'pnl-positive' : 'pnl-negative';
             return `
                 <tr>
+                    <td style="font-weight:600; color:var(--accent-cyan);">${z.symbol}</td>
                     <td>${z.id}</td>
                     <td class="${typeClass}" style="font-weight:600;">${z.type}</td>
                     <td>${range}</td>

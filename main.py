@@ -283,6 +283,7 @@ class ApexSpreadatorAgent:
             for symbol in self.config.strategy.underlyings:
                 price = prices.get(symbol, 0.0)
                 if price <= 0:
+                    print(symbol)
                     continue
 
                 # Feed the latest price to the tracker
@@ -500,30 +501,40 @@ class ApexSpreadatorAgent:
         return [t.to_dict() for t in self.position_manager.trade_history]
 
     def get_market_structure_data(self):
-        symbol = self.config.strategy.underlyings[0] if self.config.strategy.underlyings else "SPY"
-        tracker = self.strategy.get_tracker(symbol)
-        
-        current_price = 0.0
-        if tracker.candles:
-            current_price = tracker.candles[-1]["close"]
-            
-        closest_zone, proximity = tracker.get_closest_zone_proximity(current_price)
-        
         active_zones = []
-        for zone in tracker.demand_zones + tracker.supply_zones:
-            if zone.is_active:
-                active_zones.append({
-                    "id": zone.id,
-                    "type": zone.type,
-                    "low": zone.low,
-                    "high": zone.high,
-                    "origin_candle_time": zone.origin_candle_time
-                })
+        for symbol in self.config.strategy.underlyings:
+            tracker = self.strategy.get_tracker(symbol)
+            current_price = 0.0
+            if tracker.candles:
+                current_price = tracker.candles[-1]["close"]
                 
+            for zone in tracker.demand_zones + tracker.supply_zones:
+                if zone.is_active:
+                    boundary = zone.high if zone.type == "DEMAND" else zone.low
+                    distance_pct = abs(current_price - boundary) / current_price if current_price > 0 else 999.0
+                    active_zones.append({
+                        "symbol": symbol,
+                        "id": zone.id,
+                        "type": zone.type,
+                        "low": zone.low,
+                        "high": zone.high,
+                        "origin_candle_time": zone.origin_candle_time,
+                        "distance_pct": distance_pct
+                    })
+                    
+        # Sort zones so the ones closest to being retested appear first
+        active_zones.sort(key=lambda x: x["distance_pct"])
+        
+        default_symbol = self.config.strategy.underlyings[0] if self.config.strategy.underlyings else "SPY"
+        default_tracker = self.strategy.get_tracker(default_symbol)
+        default_price = default_tracker.candles[-1]["close"] if default_tracker.candles else 0.0
+        closest_zone, proximity = default_tracker.get_closest_zone_proximity(default_price)
+        
         return {
-            "bias": tracker.bias,
+            "bias": default_tracker.bias,
             "proximity_pct": proximity if closest_zone else None,
             "closest_zone": {
+                "symbol": default_symbol,
                 "id": closest_zone.id,
                 "type": closest_zone.type,
                 "low": closest_zone.low,
