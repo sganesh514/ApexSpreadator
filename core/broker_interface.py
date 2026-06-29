@@ -57,6 +57,16 @@ class BrokerBase(ABC):
         """Get current price for an underlying symbol."""
         pass
 
+    async def get_underlying_prices(self, symbols: List[str]) -> Dict[str, float]:
+        """
+        Get current market prices for a list of underlying symbols.
+        Default implementation queries them one by one.
+        """
+        prices = {}
+        for s in symbols:
+            prices[s] = await self.get_underlying_price(s)
+        return prices
+
     @abstractmethod
     async def get_options_chain(
         self,

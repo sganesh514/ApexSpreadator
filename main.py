@@ -11,7 +11,7 @@ import threading
 from datetime import datetime, timedelta
 import pandas as pd
 import uvicorn
-from core.data_loader import get_live_price, get_live_options_chain
+from core.data_loader import get_live_price, get_live_prices, get_live_options_chain
 
 from config import CONFIG, AgentConfig
 from models import (
@@ -56,6 +56,8 @@ class ApexSpreadatorAgent:
         self.journal = TradeJournal(self.config)
         self.dashboard = DashboardServer(agent=self)
 
+        self.init_balance = None
+
         # Account tracking
         self._account = AccountSnapshot(
             balance=self.config.account.starting_capital,
@@ -70,6 +72,29 @@ class ApexSpreadatorAgent:
         self._last_scan_time = None
         self._next_scan_time = None
 
+    async def initialize_account(self):
+        """Synchronize the starting capital with the live broker account balance."""
+        try:
+            logger.info("Synchronizing agent starting capital with broker...")
+            actual_balance = await self.broker.get_account_balance()
+            if actual_balance > 0.0:
+                self.init_balance = actual_balance
+                self.config.account.starting_capital = actual_balance
+                
+                # Sync AccountSnapshot fields
+                self._account.balance = actual_balance
+                self._account.equity = actual_balance
+                self._account.buying_power = actual_balance
+                self._account.month_start_balance = actual_balance
+                
+                logger.info(f"✅ Synced agent capital with {self.broker.name} account: ${actual_balance:,.2f}")
+            else:
+                logger.warning(f"⚠️ Received 0.0 balance from broker. Falling back to default starting capital: ${self.config.account.starting_capital:,.2f}")
+                self.init_balance = self.config.account.starting_capital
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to sync account balance from broker ({e}). Falling back to default starting capital: ${self.config.account.starting_capital:,.2f}")
+            self.init_balance = self.config.account.starting_capital
+
     # ═══════════════════════════════════════════════════════════════
     # Main Loop
     # ═══════════════════════════════════════════════════════════════
@@ -80,89 +105,92 @@ class ApexSpreadatorAgent:
         logger.info("  APEXSPREADATOR AGENT — Starting Up")
         logger.info("=" * 60)
 
-        # Connect to IBKR
+        # Connect to Broker
+        broker_name = self.config.connection.broker_type.upper()
         connected = await self.broker.connect()
         if not connected:
-            logger.error("Failed to connect to IBKR. Is TWS/Gateway running?")
-            logger.info("Starting in DASHBOARD-ONLY mode. Connect to IBKR and restart.")
+            logger.error(f"Failed to connect to {broker_name}. Is Gateway running?")
+            logger.info(f"Starting in DASHBOARD-ONLY mode. Connect to {broker_name} and restart.")
             self.state = AgentState.ERROR
             return
 
         self.state = AgentState.RUNNING
 
+        # Synchronize starting capital with actual broker balance
+        await self.initialize_account()
+
         # Check Ollama availability
         await self.analyst.check_availability()
 
-        # Load and parse active zones from data/active_zones.json
+        # Load and parse active zones from data/active_zones.json (Warm Start fallback to Cold Start)
         import json
         zones_path = "data/active_zones.json"
-        if not os.path.exists(zones_path):
-            logger.error(f"❌ Active zones file not found at {zones_path}. Please run the offline screener first: `python scripts/run_screener.py`")
-            self.state = AgentState.ERROR
-            return
         
-        try:
-            with open(zones_path, "r") as f:
-                active_zones = json.load(f)
-        except Exception as e:
-            logger.error(f"❌ Failed to parse active zones file: {e}. Please run the offline screener again: `python scripts/run_screener.py`")
-            self.state = AgentState.ERROR
-            return
-            
-        candidates = list(active_zones.keys())
-        if not candidates:
-            logger.error(f"❌ Active zones file at {zones_path} contains no candidates.")
-            self.state = AgentState.ERROR
-            return
-            
-        self.config.strategy.underlyings = candidates
-        logger.info(f"Watchlist initialized from active_zones.json: {', '.join(candidates)}")
-
-        # Initialize the UnderlyingTracker instances explicitly using coordinates loaded from JSON
-        from models import Zone
-        for symbol, data in active_zones.items():
-            tracker = self.strategy.get_tracker(symbol)
-            tracker.bias = data.get("trend_status", "NEUTRAL")
-            
-            # Load demand zones
-            tracker.demand_zones = []
-            for dz in data.get("demand_zones", []):
-                tracker.demand_zones.append(
-                    Zone(
-                        id=dz.get("id", ""),
-                        type="DEMAND",
-                        high=float(dz.get("high", 0.0)),
-                        low=float(dz.get("low", 0.0)),
-                        origin_candle_time=dz.get("origin_candle_time", ""),
-                        is_active=dz.get("is_active", True)
-                    )
-                )
-            
-            # Load supply zones
-            tracker.supply_zones = []
-            for sz in data.get("supply_zones", []):
-                tracker.supply_zones.append(
-                    Zone(
-                        id=sz.get("id", ""),
-                        type="SUPPLY",
-                        high=float(sz.get("high", 0.0)),
-                        low=float(sz.get("low", 0.0)),
-                        origin_candle_time=sz.get("origin_candle_time", ""),
-                        is_active=sz.get("is_active", True)
-                    )
-                )
-            
-            # Load swing points
-            if "swing_highs" in data:
-                tracker.swing_highs = [(idx, val) for idx, val in data["swing_highs"]]
-            if "swing_lows" in data:
-                tracker.swing_lows = [(idx, val) for idx, val in data["swing_lows"]]
-            
-            # Load candles
-            if "candles" in data:
-                tracker.candles = data["candles"]
+        active_zones = {}
+        if not os.path.exists(zones_path):
+            logger.warning("⚠️ Active zones file missing. Initializing agent with empty state/scanning mode.")
+            self.strategy.trackers = {}
+        else:
+            try:
+                with open(zones_path, "r") as f:
+                    active_zones = json.load(f)
                 
-            logger.info(f"Initialized tracker for {symbol}: bias={tracker.bias}, demand_zones={len(tracker.demand_zones)}, supply_zones={len(tracker.supply_zones)}")
+                candidates = list(active_zones.keys())
+                if candidates:
+                    self.config.strategy.underlyings = candidates
+                    logger.info(f"Watchlist initialized from active_zones.json: {', '.join(candidates)}")
+                    
+                    # Initialize the UnderlyingTracker instances explicitly using coordinates loaded from JSON
+                    from models import Zone
+                    for symbol, data in active_zones.items():
+                        tracker = self.strategy.get_tracker(symbol)
+                        tracker.bias = data.get("trend_status", "NEUTRAL")
+                        
+                        # Load demand zones
+                        tracker.demand_zones = []
+                        for dz in data.get("demand_zones", []):
+                            tracker.demand_zones.append(
+                                Zone(
+                                    id=dz.get("id", ""),
+                                    type="DEMAND",
+                                    high=float(dz.get("high", 0.0)),
+                                    low=float(dz.get("low", 0.0)),
+                                    origin_candle_time=dz.get("origin_candle_time", ""),
+                                    is_active=dz.get("is_active", True)
+                                )
+                            )
+                        
+                        # Load supply zones
+                        tracker.supply_zones = []
+                        for sz in data.get("supply_zones", []):
+                            tracker.supply_zones.append(
+                                Zone(
+                                    id=sz.get("id", ""),
+                                    type="SUPPLY",
+                                    high=float(sz.get("high", 0.0)),
+                                    low=float(sz.get("low", 0.0)),
+                                    origin_candle_time=sz.get("origin_candle_time", ""),
+                                    is_active=sz.get("is_active", True)
+                                )
+                            )
+                        
+                        # Load swing points
+                        if "swing_highs" in data:
+                            tracker.swing_highs = [(idx, val) for idx, val in data["swing_highs"]]
+                        if "swing_lows" in data:
+                            tracker.swing_lows = [(idx, val) for idx, val in data["swing_lows"]]
+                        
+                        # Load candles
+                        if "candles" in data:
+                            tracker.candles = data["candles"]
+                            
+                        logger.info(f"Initialized tracker for {symbol}: bias={tracker.bias}, demand_zones={len(tracker.demand_zones)}, supply_zones={len(tracker.supply_zones)}")
+                else:
+                    logger.warning("⚠️ Active zones file is empty. Initializing agent with empty state/scanning mode.")
+                    self.strategy.trackers = {}
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to parse active zones file: {e}. Initializing agent with empty state/scanning mode.")
+                self.strategy.trackers = {}
 
         # Refresh account data
         await self._refresh_account()
@@ -228,7 +256,7 @@ class ApexSpreadatorAgent:
         await self._shutdown()
 
     async def _run_scan(self):
-        """Execute a single scan cycle by fetching the latest live prices and feeding them to trackers."""
+        """Execute a single scan cycle by fetching the latest live prices in batch and feeding them to trackers."""
         self._scanner_status.is_scanning = True
         self._last_scan_time = now_iso()
 
@@ -236,24 +264,28 @@ class ApexSpreadatorAgent:
             # Refresh account
             await self._refresh_account()
 
+            # Batch query all stock prices plus VIX in a single call to avoid rate limits
+            symbols_to_query = list(self.config.strategy.underlyings)
+            if "^VIX" not in symbols_to_query:
+                symbols_to_query.append("^VIX")
+                
+            logger.info(f"Scanning prices in batch for {len(symbols_to_query)} symbols...")
+            prices = await get_live_prices(symbols_to_query, self.broker)
+
+            # Resolve IV from VIX
+            vix_val = prices.get("^VIX", 18.0)
+            if vix_val <= 0:
+                vix_val = 18.0
+            iv_val = vix_val / 100.0
+
+            today_str = datetime.now().strftime("%Y-%m-%d")
+
             for symbol in self.config.strategy.underlyings:
-                price = await get_live_price(symbol, self.broker)
+                price = prices.get(symbol, 0.0)
                 if price <= 0:
                     continue
-                
-                # Fetch live/mid option IV if available from VIX or index
-                vix_val = 18.0
-                try:
-                    vix_val = await get_live_price("^VIX", self.broker)
-                    if vix_val <= 0:
-                        vix_val = 18.0
-                except Exception:
-                    pass
-                iv_val = vix_val / 100.0
 
-                today_str = datetime.now().strftime("%Y-%m-%d")
-
-                # Feed the latest price to the tracker (StrategyEngine.add_bar handles same-day vs new-day)
+                # Feed the latest price to the tracker
                 opp = self.strategy.add_bar(
                     symbol=symbol,
                     open_p=price,

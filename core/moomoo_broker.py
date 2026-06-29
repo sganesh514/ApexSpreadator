@@ -13,7 +13,8 @@ try:
     from moomoo import (
         OpenQuoteContext, OpenSecTradeContext as OpenSecContext,
         OptionType, OptionStrategyType, TrdSide, OrderType,
-        TrdEnv, ModifyOrderOp, ComboLeg
+        TrdEnv, ModifyOrderOp, ComboLeg,
+        SecurityFirm, TrdMarket
     )
 except ImportError:
     # Fallback/mock structure if SDK is not present in local python env
@@ -36,6 +37,10 @@ except ImportError:
         SIMULATE = 2
     class ModifyOrderOp: pass
     class ComboLeg: pass
+    class SecurityFirm:
+        FUTUINC = 2
+    class TrdMarket:
+        US = 2
 
 from utils import get_logger, calculate_dte
 from core.broker_interface import BrokerBase
@@ -44,7 +49,15 @@ logger = get_logger("Moomoo")
 
 
 def _format_symbol(symbol: str) -> str:
-    """Format symbol with US market prefix if missing."""
+    """Format symbol with US market prefix if missing, mapping index symbols correctly."""
+    clean_sym = symbol.strip().upper()
+    if clean_sym in ("VIX", "^VIX"):
+        return "US.IDX.VIX"
+    if clean_sym in ("SPX", "^SPX"):
+        return "US.IDX.SPX"
+    if clean_sym in ("NDX", "^NDX"):
+        return "US.IDX.NDX"
+
     if "." not in symbol:
         return f"US.{symbol}"
     return symbol
@@ -90,7 +103,12 @@ class MoomooBroker(BrokerBase):
             
             def _init_connections():
                 quote_ctx = OpenQuoteContext(host=self._host, port=self._port)
-                trade_ctx = OpenSecContext(host=self._host, port=self._port)
+                trade_ctx = OpenSecContext(
+                    host=self._host,
+                    port=self._port,
+                    security_firm=SecurityFirm.FUTUINC,
+                    filter_trdmarket=TrdMarket.US
+                )
                 quote_ctx.start()
                 trade_ctx.start()
                 return quote_ctx, trade_ctx
@@ -149,21 +167,27 @@ class MoomooBroker(BrokerBase):
         try:
             def _fetch_acc_info():
                 ret, data = self._trade_ctx.accinfo_query(trd_env=self.trd_env)
-                if ret == 0 and not data.empty:
-                    row = data.iloc[0]
-                    return {
-                        "balance": float(row.get("cash", 0.0)),
-                        "equity": float(row.get("total_assets", 0.0)),
-                        "buying_power": float(row.get("power", 0.0)),
-                        "unrealized_pnl": float(row.get("unrealized_pnl", 0.0)),
-                        "realized_pnl": float(row.get("realized_pnl", 0.0)),
-                    }
+                if ret == 0:
+                    if not data.empty:
+                        row = data.iloc[0]
+                        return {
+                            "balance": float(row.get("cash", 0.0)),
+                            "equity": float(row.get("total_assets", 0.0)),
+                            "buying_power": float(row.get("power", 0.0)),
+                            "unrealized_pnl": float(row.get("unrealized_pnl", 0.0)),
+                            "realized_pnl": float(row.get("realized_pnl", 0.0)),
+                        }
+                    else:
+                        logger.warning("Moomoo accinfo_query returned empty DataFrame.")
+                else:
+                    logger.error(f"Moomoo accinfo_query failed (ret={ret}): {data}")
                 return None
                 
             summary = await asyncio.to_thread(_fetch_acc_info)
             if summary:
                 return summary
             
+            logger.warning(f"Moomoo account summary query failed. Falling back to default balance (25000.0).")
             # Return defaults if call failed
             return {
                 "balance": 25000.0,
@@ -190,9 +214,14 @@ class MoomooBroker(BrokerBase):
         try:
             def _fetch_snapshot():
                 ret, data = self._quote_ctx.get_market_snapshot([code])
-                if ret == 0 and not data.empty:
-                    price = data['last_price'].iloc[0]
-                    return float(price)
+                if ret == 0:
+                    if not data.empty:
+                        price = data['last_price'].iloc[0]
+                        return float(price)
+                    else:
+                        logger.warning(f"Moomoo get_market_snapshot returned empty DataFrame for {code}")
+                else:
+                    logger.error(f"Moomoo get_market_snapshot failed for {code} (ret={ret}): {data}")
                 return 0.0
             
             price = await asyncio.to_thread(_fetch_snapshot)
@@ -204,6 +233,73 @@ class MoomooBroker(BrokerBase):
         except Exception as e:
             logger.error(f"Error getting price for {symbol} via Moomoo: {e}")
             return 0.0
+
+    async def get_underlying_prices(self, symbols: List[str]) -> Dict[str, float]:
+        """Get current market prices for a list of underlying symbols in batch."""
+        if not symbols:
+            return {}
+            
+        formatted_codes = []
+        code_to_sym = {}
+        for s in symbols:
+            clean_s = s.lstrip("^") if s.startswith("^") else s
+            code = _format_symbol(clean_s)
+            formatted_codes.append(code)
+            code_to_sym[code] = s
+            
+        try:
+            def _fetch_snapshots():
+                chunk_size = 200
+                results = {}
+                
+                # Maintain a runtime cache of known bad codes to skip
+                if not hasattr(self, "_bad_codes"):
+                    self._bad_codes = set()
+                    
+                for i in range(0, len(formatted_codes), chunk_size):
+                    chunk = [c for c in formatted_codes[i:i + chunk_size] if c not in self._bad_codes]
+                    
+                    while chunk:
+                        ret, data = self._quote_ctx.get_market_snapshot(chunk)
+                        if ret == 0:
+                            if not data.empty:
+                                for _, row in data.iterrows():
+                                    code = row.get("code")
+                                    price = row.get("last_price", 0.0)
+                                    sym = code_to_sym.get(code)
+                                    if sym and price > 0:
+                                        results[sym] = float(price)
+                            break  # Success, move to next chunk
+                        else:
+                            # Parse error message to identify bad stock
+                            err_msg = str(data)
+                            match = re.search(r"Unknown stock\.\s*([A-Za-z0-9\-\.]+)", err_msg)
+                            if match:
+                                bad_ticker = match.group(1)
+                                bad_code_1 = f"US.{bad_ticker}"
+                                bad_code_2 = bad_ticker
+                                
+                                bad_found = False
+                                for bc in [bad_code_1, bad_code_2]:
+                                    if bc in chunk:
+                                        chunk.remove(bc)
+                                        self._bad_codes.add(bc)
+                                        bad_found = True
+                                        logger.warning(f"⚠️ Removed unknown stock from Moomoo snapshot list: {bc}")
+                                
+                                if not bad_found:
+                                    logger.error(f"Moomoo snapshot failed for chunk, could not resolve bad code from: {err_msg}")
+                                    break
+                            else:
+                                logger.error(f"Moomoo get_market_snapshot failed for chunk: {chunk} (ret={ret}): {data}")
+                                break  # Another error, break out
+                return results
+                
+            prices = await asyncio.to_thread(_fetch_snapshots)
+            return prices
+        except Exception as e:
+            logger.error(f"Error getting batch prices via Moomoo: {e}")
+            return {}
 
     async def get_options_expirations(self, symbol: str) -> List[str]:
         """Get available option expiration dates."""
@@ -255,8 +351,13 @@ class MoomooBroker(BrokerBase):
             # 1. Get available expiration dates
             def _get_exps():
                 ret, data = self._quote_ctx.get_option_expiration_date(code=code)
-                if ret == 0 and not data.empty:
-                    return data['strike_time'].values.tolist()
+                if ret == 0:
+                    if not data.empty:
+                        return data['strike_time'].values.tolist()
+                    else:
+                        logger.warning(f"Moomoo get_option_expiration_date returned empty DataFrame for {code}")
+                else:
+                    logger.error(f"Moomoo get_option_expiration_date failed for {code} (ret={ret}): {data}")
                 return []
                 
             expirations = await asyncio.to_thread(_get_exps)
@@ -270,7 +371,7 @@ class MoomooBroker(BrokerBase):
                     valid_exps.append((exp, exp_clean, dte))
                     
             if not valid_exps:
-                logger.warning(f"No valid expirations found for {code} in range {min_dte}-{max_dte}")
+                logger.warning(f"No valid expirations found for {code} in range {min_dte}-{max_dte}. Total raw exps: {len(expirations)}")
                 return pd.DataFrame()
                 
             # Limit expirations to manage API load
@@ -289,17 +390,22 @@ class MoomooBroker(BrokerBase):
                         end=exp_str,
                         option_type=opt_type
                     )
-                    if ret == 0 and not data.empty:
-                        codes = data['code'].values.tolist()
-                        contract_codes.extend(codes)
-                        for c in codes:
-                            dte_mapping[c] = dte
-                            exp_mapping[c] = exp_clean
+                    if ret == 0:
+                        if not data.empty:
+                            codes = data['code'].values.tolist()
+                            contract_codes.extend(codes)
+                            for c in codes:
+                                dte_mapping[c] = dte
+                                exp_mapping[c] = exp_clean
+                        else:
+                            logger.warning(f"Moomoo get_option_chain returned empty DataFrame for {code} on {exp_str}")
+                    else:
+                        logger.error(f"Moomoo get_option_chain failed for {code} on {exp_str} (ret={ret}): {data}")
                             
             await asyncio.to_thread(_fetch_chains)
             
             if not contract_codes:
-                logger.warning(f"No contract codes found for {code}")
+                logger.warning(f"No contract codes found for {code} after querying expirations")
                 return pd.DataFrame()
                 
             # 3. Fetch market snapshot in chunks
@@ -310,8 +416,13 @@ class MoomooBroker(BrokerBase):
                 for i in range(0, len(contract_codes), chunk_size):
                     chunk = contract_codes[i : i + chunk_size]
                     ret, data = self._quote_ctx.get_market_snapshot(chunk)
-                    if ret == 0 and not data.empty:
-                        snapshot_dfs.append(data)
+                    if ret == 0:
+                        if not data.empty:
+                            snapshot_dfs.append(data)
+                        else:
+                            logger.warning(f"Moomoo get_market_snapshot returned empty DataFrame for options chunk of {code}")
+                    else:
+                        logger.error(f"Moomoo get_market_snapshot failed for options chunk of {code} (ret={ret}): {data}")
                         
             await asyncio.to_thread(_fetch_snapshots)
             

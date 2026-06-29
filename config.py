@@ -9,7 +9,7 @@ from typing import List, Dict
 @dataclass
 class ConnectionConfig:
     """Broker connection settings."""
-    broker_type: str = "ibkr"  # Default broker
+    broker_type: str = "moomoo"  # Default broker
     host: str = "127.0.0.1"
     client_id: int = 1
     timeout: int = 30         # Connection timeout in seconds
@@ -34,7 +34,7 @@ NASDAQ100_TICKERS = [
     "MELI", "CHTR", "MAR", "CSX", "ORLY", "CTAS", "NXPI", "MNST", "FTNT", "DXCM",
     "KDP", "AEP", "ODFL", "PAYX", "KHC", "EXC", "EA", "BIIB", "CTSH", "ROP",
     "FAST", "VRSK", "CPRT", "PCAR", "WBD", "DDOG", "CRWD", "MCHP", "OXY", "DLTR",
-    "EBAY", "ILMN", "IDXX", "WDAY", "WMB", "FANG", "CSGP", "ALGN", "ANSS", "ZS",
+    "EBAY", "ILMN", "IDXX", "WDAY", "WMB", "FANG", "CSGP", "ALGN", "ZS",
     "SWKS", "ZM", "DOCU", "CDW"
 ]
 
@@ -55,7 +55,7 @@ class StrategyConfig:
         "1h": 7,      # 1-Hour chart -> 7 DTE
         "15m": 3,     # 15-Min chart -> 3 DTE
     })
-    default_timeframe: str = "1d"
+    default_timeframe: str = "1h"
 
     # Swing Point Extrema Window Size (N bars on each side)
     fractal_window: int = 3
@@ -84,7 +84,7 @@ class RiskConfig:
 @dataclass
 class ScheduleConfig:
     """Timing and scheduling."""
-    scan_interval_seconds: int = 300      # 5 minutes
+    scan_interval_seconds: int = 30      # 1 minute
     position_check_seconds: int = 60      # 1 minute
     account_refresh_seconds: int = 3600   # 1 hour
     market_open: str = "09:30"            # ET
