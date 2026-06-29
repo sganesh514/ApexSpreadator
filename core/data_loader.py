@@ -23,6 +23,24 @@ async def get_live_price(symbol: str, broker: Any) -> float:
         return 0.0
 
 
+async def get_live_prices(symbols: List[str], broker: Any) -> Dict[str, float]:
+    """
+    Retrieve the live prices of multiple underlying assets from the broker in batch.
+    """
+    try:
+        if broker and hasattr(broker, "get_underlying_prices"):
+            return await broker.get_underlying_prices(symbols)
+            
+        # Fallback to individual calls
+        prices = {}
+        for sym in symbols:
+            prices[sym] = await get_live_price(sym, broker)
+        return prices
+    except Exception as e:
+        logger.error(f"Error fetching live batch prices: {e}")
+        return {}
+
+
 async def get_live_options_chain(
     symbol: str,
     broker: Any,

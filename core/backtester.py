@@ -109,10 +109,6 @@ class OptionsBacktester:
         
         # Initialize strategy in backtest mode
         self.strategy = StrategyEngine(broker=None, config=CONFIG, risk_manager=None)
-        
-        # Initialize screener for dynamic watchlist simulation
-        from core.screener import ScreenerEngine
-        self.screener = ScreenerEngine(CONFIG)
 
 
     def run_backtest(self, df_data: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -144,8 +140,7 @@ class OptionsBacktester:
         dates = df_data["Date"].unique()
         symbols = df_data["Symbol"].unique()
         
-        self._last_screen_time = None
-        self.active_watchlist = list(symbols)
+        self.active_watchlist = list(CONFIG.strategy.underlyings)
 
         
         # Build lookup table for rapid row access
@@ -252,19 +247,7 @@ class OptionsBacktester:
             self.positions = active_positions
 
             # ── 2. Scan for new entries via Strategy Engine ──
-            # First, update watchlist rotation interval logic
-            screener_type = getattr(CONFIG.strategy, "screener_type", "static")
-            if screener_type != "static":
-                from datetime import datetime, timedelta
-                current_sim_time = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S" if is_intraday else "%Y-%m-%d")
-                
-                if self._last_screen_time is None or (current_sim_time - self._last_screen_time) >= timedelta(minutes=30):
-                    self._last_screen_time = current_sim_time
-                    # Get new candidates using the simulation timestamp
-                    sim_date = date_str
-                    self.active_watchlist = self.screener.get_candidate_list(current_time=sim_date)
-            else:
-                self.active_watchlist = list(symbols)
+            self.active_watchlist = list(CONFIG.strategy.underlyings)
 
             # Feed daily bars to ALL trackers to build zone history and indicators
             opportunities = {}
