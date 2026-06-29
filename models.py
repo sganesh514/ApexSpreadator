@@ -5,6 +5,7 @@ All dataclasses and enums representing options contracts, spreads, market struct
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict, Any
+import datetime
 
 
 class TradeStatus(Enum):
@@ -69,6 +70,7 @@ class VerticalSpread:
     id: str = ""
     symbol: str = ""
     expiration: str = ""
+    expiration_date: Optional[datetime.date] = None
     right: str = "C"            # C for Call spread, P for Put spread
     long_leg: Optional[OptionLeg] = None
     short_leg: Optional[OptionLeg] = None

@@ -100,6 +100,37 @@ class DashboardServer:
                 self._websockets.discard(websocket)
                 logger.info(f"WebSocket disconnected. Total clients: {len(self._websockets)}")
 
+        # ── Backtest data API (interval-aware) ──
+        @self.app.get("/api/intervals")
+        async def get_available_intervals():
+            """Return list of intervals that have data."""
+            data_root = Path(__file__).parent.parent / "data"
+            intervals = []
+            for candidate in ["15m", "1d", "1y"]:
+                interval_dir = data_root / candidate
+                if interval_dir.is_dir() and (interval_dir / "all_symbols.csv").exists():
+                    intervals.append(candidate)
+            return {"intervals": intervals}
+
+        @self.app.get("/api/backtest/{interval}")
+        async def get_backtest_data(interval: str):
+            """Return backtest report and trades for a given interval."""
+            data_root = Path(__file__).parent.parent / "data"
+            report_path = data_root / "backtest_report.json"
+            trades_path = data_root / "backtest_trades.json"
+            result: Dict[str, Any] = {"interval": interval, "report": None, "trades": []}
+            if report_path.exists():
+                result["report"] = json.loads(report_path.read_text(encoding="utf-8"))
+            if trades_path.exists():
+                trades = json.loads(trades_path.read_text(encoding="utf-8"))
+                # Ensure every trade has consistent keys
+                for t in trades:
+                    t.setdefault("expiration", "")
+                    t.setdefault("holding_days", 0)
+                    t.setdefault("reason", "unknown")
+                result["trades"] = trades
+            return result
+
         self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     async def broadcast(self, event_type: str, data: dict) -> None:

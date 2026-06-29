@@ -17,6 +17,8 @@ venv.bak/
 data/*.csv
 data/*.json
 data/*.log
+data/**/*.csv
+data/**/*.json
 data/temp/
 
 # Exclude standard download script

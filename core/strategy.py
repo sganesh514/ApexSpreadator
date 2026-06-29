@@ -4,6 +4,7 @@ Coordinates UnderlyingTracker and OptionsSelector to make entry decisions,
 sizes positions, and checks chart-based exit conditions.
 """
 from typing import List, Dict, Optional, Tuple, Any
+import datetime
 from config import AgentConfig
 from models import Opportunity, Position, VerticalSpread, TradeStatus, ExitReason, AccountSnapshot
 from core.broker_base import BrokerBase
@@ -92,11 +93,10 @@ class StrategyEngine:
         timeframe = self.config.strategy.default_timeframe
         dte = self.config.strategy.timeframe_dte_map.get(timeframe, 30)
         
-        # In a backtest or live, we determine expiration based on current time + dte
-        # For mock backtester we just use a generic expiration date string
-        # Let's mock a standard expiration format like YYYYMMDD
-        import datetime
-        expiration_date = (datetime.datetime.now() + datetime.timedelta(days=dte)).strftime("%Y%m%d")
+        # Calculate expiration from the bar's simulation timestamp, not real-world time
+        from utils import str_to_date
+        bar_dt = str_to_date(timestamp)
+        expiration_date = (bar_dt + datetime.timedelta(days=dte)).strftime("%Y%m%d")
 
         # Implied Volatility (IV)
         # In live we query broker, in backtesting we pass it or fallback to the candle's VIX metric
@@ -237,10 +237,11 @@ class StrategyEngine:
         self,
         position: Position,
         current_underlying_price: float,
+        current_simulation_date: Optional[datetime.date] = None
     ) -> Tuple[bool, ExitReason, str]:
         """
-        Check if a position has hit its take profit (sold strike) or stop loss (invalidation point)
-        entirely based on the underlying price.
+        Check if a position should be exited.
+        Priority: 1) Premium stop-loss  2) Time exit  3) TP/SL on underlying.
         """
         if position.status != TradeStatus.OPEN:
             return False, ExitReason.MANUAL_CLOSE, "Position not open"
@@ -249,11 +250,18 @@ class StrategyEngine:
         if not spread:
             return False, ExitReason.MANUAL_CLOSE, "No spread defined for position"
 
-        # Check DTE expiration (force close at 0 DTE or 1 DTE)
-        if spread.long_leg and spread.long_leg.dte <= 0:
-            msg = f"⏰ DTE Exit on {position.id} ({spread.symbol}): Option expired."
-            logger.info(msg)
-            return True, ExitReason.TIME_EXIT, msg
+        # 1. Premium Stop-Loss (50% of debit lost)
+        if position.unrealized_pnl_pct <= -0.50:
+            msg = f"🛑 PREMIUM STOP LOSS on {spread.symbol}: PnL at {position.unrealized_pnl_pct * 100:.1f}%"
+            logger.warning(msg)
+            return True, ExitReason.STOP_LOSS, msg
+
+        # 2. Time Exit — deterministic absolute date comparison
+        if current_simulation_date and spread.expiration_date:
+            if current_simulation_date >= spread.expiration_date:
+                msg = f"⏰ TIME EXIT on {position.id} ({spread.symbol}): Simulation date {current_simulation_date} >= expiry {spread.expiration_date}"
+                logger.info(msg)
+                return True, ExitReason.TIME_EXIT, msg
 
         is_call = (spread.right == "C")
         tp_level = position.take_profit_price

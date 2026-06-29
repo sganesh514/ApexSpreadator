@@ -53,10 +53,18 @@ class BacktestPosition(Position):
         reward = width - entry_price
         rr_ratio = reward / risk if risk > 0 else 0.0
 
+        # Calculate expiration_date as datetime.date from entry_date + dte
+        from utils import str_to_date
+        from datetime import timedelta
+        entry_dt = str_to_date(entry_date)
+        exp_dt = entry_dt + timedelta(days=dte)
+        expiration_str = exp_dt.strftime("%Y%m%d")
+
         spread_obj = VerticalSpread(
             id=f"SPD_{BacktestPosition._counter:05d}",
             symbol=symbol,
-            expiration="",
+            expiration=expiration_str,
+            expiration_date=exp_dt.date(),
             right=right,
             long_leg=long_leg,
             short_leg=short_leg,
@@ -150,6 +158,9 @@ class OptionsBacktester:
         
         # Main simulation daily loop
         for day_idx, date_str in enumerate(sorted_dates):
+            # Convert date_str to datetime.date for deterministic comparisons
+            sim_date = pd.to_datetime(date_str).date()
+
             # Print progress
             if day_idx % max(1, int(total_days / 10)) == 0 or day_idx == total_days - 1:
                 pct = (day_idx / (total_days - 1)) * 100 if total_days > 1 else 100.0
@@ -174,30 +185,33 @@ class OptionsBacktester:
                 stock_price = rec["close"]
                 iv = rec["iv"]
 
-                # Decrement DTE
-                if pos.spread.long_leg:
-                    pos.spread.long_leg.dte = max(0, pos.spread.long_leg.dte - 1)
-                if pos.spread.short_leg:
-                    pos.spread.short_leg.dte = max(0, pos.spread.short_leg.dte - 1)
+                # Compute DTE dynamically from absolute expiration_date
+                if pos.spread.expiration_date:
+                    days_to_expiry = (pos.spread.expiration_date - sim_date).days
+                    dte_for_pricing = max(0.0001, float(days_to_expiry))
+                else:
+                    dte_for_pricing = max(0.0001, float(pos.spread.long_leg.dte))
 
                 # Price legs via Black-Scholes
                 is_call = (pos.spread.right == "C")
-                long_dte = pos.spread.long_leg.dte
-                short_dte = pos.spread.short_leg.dte
 
                 if is_call:
-                    long_price, _, _, _ = black_scholes_call(stock_price, pos.spread.long_leg.strike, long_dte / 365.0, 0.04, iv)
-                    short_price, _, _, _ = black_scholes_call(stock_price, pos.spread.short_leg.strike, short_dte / 365.0, 0.04, iv)
+                    long_price, _, _, _ = black_scholes_call(stock_price, pos.spread.long_leg.strike, dte_for_pricing / 365.0, 0.04, iv)
+                    short_price, _, _, _ = black_scholes_call(stock_price, pos.spread.short_leg.strike, dte_for_pricing / 365.0, 0.04, iv)
                 else:
-                    long_price, _, _, _ = black_scholes_put(stock_price, pos.spread.long_leg.strike, long_dte / 365.0, 0.04, iv)
-                    short_price, _, _, _ = black_scholes_put(stock_price, pos.spread.short_leg.strike, short_dte / 365.0, 0.04, iv)
+                    long_price, _, _, _ = black_scholes_put(stock_price, pos.spread.long_leg.strike, dte_for_pricing / 365.0, 0.04, iv)
+                    short_price, _, _, _ = black_scholes_put(stock_price, pos.spread.short_leg.strike, dte_for_pricing / 365.0, 0.04, iv)
 
                 pos.current_value = long_price - short_price
                 pos.unrealized_pnl = (pos.current_value - pos.entry_price) * pos.quantity * 100.0
                 pos.unrealized_pnl_pct = (pos.current_value - pos.entry_price) / pos.entry_price if pos.entry_price > 0 else 0.0
 
-                # Check exit conditions
-                should_exit, exit_reason, msg = self.strategy.check_exit_conditions(pos, current_underlying_price=stock_price)
+                # Check exit conditions (deterministic date-based)
+                should_exit, exit_reason, msg = self.strategy.check_exit_conditions(
+                    pos,
+                    current_underlying_price=stock_price,
+                    current_simulation_date=sim_date
+                )
 
                 if should_exit:
                     realized_cash = pos.current_value * pos.quantity * 100.0
@@ -220,8 +234,9 @@ class OptionsBacktester:
                         "exit_price": round(pos.current_value, 4),
                         "pnl": round(pos.unrealized_pnl, 2),
                         "pnl_pct": round(pos.unrealized_pnl_pct, 4),
-                        "holding_days": (day_idx - sorted_dates.index(pos.entry_date)) if pos.entry_date in sorted_dates else 0,
-                        "reason": exit_reason.value
+                        "holding_days": (sim_date - pd.to_datetime(pos.entry_date).date()).days,
+                        "reason": exit_reason.value,
+                        "expiration": pos.spread.expiration
                     })
                 else:
                     active_positions.append(pos)
