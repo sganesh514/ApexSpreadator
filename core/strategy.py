@@ -37,13 +37,17 @@ class StrategyEngine:
             )
         return self.trackers[symbol]
 
-    def add_bar(self, symbol: str, open_p: float, high_p: float, low_p: float, close_p: float, volume: float, timestamp: str, iv: float = 0.18) -> Optional[Opportunity]:
+    def ingest_and_detect(self, symbol: str, open_p: float, high_p: float, low_p: float, close_p: float, volume: float, timestamp: str, iv: float = 0.18) -> Optional[Dict[str, Any]]:
         """
-        Ingest a new price bar and check if it triggers a vertical spread opportunity.
-        Handles same-day updates and new day additions.
+        Ingest a new price bar and detect if it triggers a zone retest signal.
+        Returns a raw signal dict if a retest occurs, else None.
+
+        This method only handles candle ingestion and signal detection — it does
+        NOT price or create spreads.  Use price_signal() to convert the raw
+        signal into a priced Opportunity.
         """
         tracker = self.get_tracker(symbol)
-        
+
         # Check if same day update
         if tracker.candles and tracker.candles[-1]["time"] == timestamp:
             last_candle = tracker.candles[-1]
@@ -51,37 +55,54 @@ class StrategyEngine:
             last_candle["high"] = max(last_candle["high"], high_p)
             last_candle["low"] = min(last_candle["low"], low_p)
             last_candle["volume"] = volume
-            
+
             # Check zone invalidations on close
             tracker._check_zone_invalidations(close_p)
-            
+
             # Check for retests
             signal = tracker._check_zone_retests(last_candle)
         else:
             signal = tracker.add_candle(open_p, high_p, low_p, close_p, volume, timestamp, iv)
 
-        if not signal:
-            return None
+        return signal
 
-        # ── Retest signal detected, translate to options spread ──
+    def price_signal(
+        self,
+        signal: Dict[str, Any],
+        timestamp: str,
+        iv: float = 0.18,
+        options_chain: Optional[Any] = None,
+        is_backtesting: bool = False,
+    ) -> Optional[Opportunity]:
+        """
+        Convert a raw zone retest signal into an actionable Opportunity by
+        pricing a vertical debit spread.
+
+        When ``options_chain`` is provided (live mode), uses real broker chain
+        data for strike selection and per-contract IV.  When ``options_chain``
+        is None, behaviour depends on ``is_backtesting``:
+          - True  → generates a synthetic spread via Black-Scholes.
+          - False → returns None (live mode requires real chain data).
+        """
         zone = signal["zone"]
         direction = signal["direction"]
         current_price = signal["price"]
+        symbol = signal["symbol"]
+
+        tracker = self.get_tracker(symbol)
 
         # Calculate take-profit target (sold strike) from swing points
-        # If bullish retest: target the last swing high.
-        # If bearish retest: target the last swing low.
         target_tp = current_price
         if direction == "BULLISH":
             if tracker.swing_highs:
                 target_tp = tracker.swing_highs[-1][1]
             else:
-                target_tp = current_price * 1.05  # fallback +5%
+                target_tp = current_price * 1.05
         else:
             if tracker.swing_lows:
                 target_tp = tracker.swing_lows[-1][1]
             else:
-                target_tp = current_price * 0.95  # fallback -5%
+                target_tp = current_price * 0.95
 
         # Calculate invalidation point (stop loss level just outside the zone)
         if direction == "BULLISH":
@@ -92,20 +113,20 @@ class StrategyEngine:
         # Get expiration and DTE mapping based on config
         timeframe = self.config.strategy.default_timeframe
         dte = self.config.strategy.timeframe_dte_map.get(timeframe, 30)
-        
-        # Calculate expiration from the bar's simulation timestamp, not real-world time
+
         from utils import str_to_date
         bar_dt = str_to_date(timestamp)
         expiration_date = (bar_dt + datetime.timedelta(days=dte)).strftime("%Y%m%d")
 
-        # Implied Volatility (IV)
-        # In live we query broker, in backtesting we pass it or fallback to the candle's VIX metric
-        iv_val = 0.18
+        # Implied Volatility — prefer the explicitly passed IV (e.g. ATM IV
+        # extracted from the broker's chain) over the candle's VIX proxy.
+        iv_val = 0.18  # absolute backstop
         if len(tracker.candles) > 0 and "iv" in tracker.candles[-1]:
-            iv_val = tracker.candles[-1]["iv"]
-        elif self.broker:
-            # Query broker for IV if connected
-            pass
+            candle_iv = tracker.candles[-1]["iv"]
+            if candle_iv and candle_iv > 0.001:
+                iv_val = candle_iv
+        if iv > 0.001:
+            iv_val = iv  # explicit override (e.g. per-symbol ATM IV)
 
         # Select option vertical spread and apply R:R check
         try:
@@ -118,8 +139,8 @@ class StrategyEngine:
                 expiration=expiration_date,
                 dte=dte,
                 iv=iv_val,
-                options_chain=None,  # Can be passed in live mode
-                is_backtesting=(self.broker is None)
+                options_chain=options_chain,
+                is_backtesting=is_backtesting
             )
         except BrokerDataError as err:
             spread, status = None, str(err)
@@ -141,6 +162,27 @@ class StrategyEngine:
         )
 
         return opp
+
+    def add_bar(self, symbol: str, open_p: float, high_p: float, low_p: float, close_p: float, volume: float, timestamp: str, iv: float = 0.18) -> Optional[Opportunity]:
+        """
+        Ingest a new price bar and check if it triggers a vertical spread opportunity.
+
+        Backward-compatible convenience method that calls ingest_and_detect()
+        then price_signal().  Used by the backtester where synthetic spreads
+        are acceptable.  In live mode, callers should use ingest_and_detect()
+        and price_signal() separately so they can fetch a real options chain
+        from the broker between the two calls.
+        """
+        signal = self.ingest_and_detect(symbol, open_p, high_p, low_p, close_p, volume, timestamp, iv)
+        if not signal:
+            return None
+        return self.price_signal(
+            signal=signal,
+            timestamp=timestamp,
+            iv=iv,
+            options_chain=None,
+            is_backtesting=(self.broker is None)
+        )
 
     def should_enter(
         self,

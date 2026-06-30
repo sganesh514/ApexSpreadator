@@ -65,3 +65,60 @@ async def get_live_options_chain(
     except Exception as e:
         logger.error(f"Error fetching options chain for {symbol}: {e}")
         return []
+
+
+def extract_atm_iv_from_chain(
+    chain,
+    underlying_price: float,
+    right: str = "C",
+) -> Optional[float]:
+    """
+    Extract per-symbol ATM implied volatility from an already-fetched options chain.
+
+    Finds the nearest ATM contract (closest strike to underlying_price) from the
+    nearest available expiration and returns its broker-reported implied volatility.
+
+    Accepts both pandas DataFrame and list-of-dicts input.
+    Returns IV as a decimal (e.g. 0.35 for 35%), or None if unavailable.
+    """
+    import pandas as pd
+
+    if isinstance(chain, pd.DataFrame):
+        if chain.empty:
+            return None
+        chain = chain.to_dict(orient="records")
+
+    if not chain:
+        return None
+
+    # Filter to the specified right
+    contracts = [c for c in chain if c.get("right") == right]
+    if not contracts:
+        contracts = list(chain)  # fallback: any right
+
+    # Nearest expiration
+    expirations = sorted(set(c["expiration"] for c in contracts if c.get("expiration")))
+    if not expirations:
+        return None
+
+    nearest_contracts = [c for c in contracts if c["expiration"] == expirations[0]]
+    if not nearest_contracts:
+        return None
+
+    # Nearest ATM contract
+    atm_contract = min(
+        nearest_contracts,
+        key=lambda c: abs(float(c.get("strike", 0)) - underlying_price)
+    )
+
+    iv = atm_contract.get("iv", 0.0)
+    if iv and float(iv) > 0.001:
+        logger.debug(
+            f"Extracted ATM IV for {atm_contract.get('symbol', '?')}: "
+            f"{float(iv)*100:.1f}% (strike={atm_contract.get('strike')}, "
+            f"exp={atm_contract.get('expiration')})"
+        )
+        return float(iv)
+
+    return None
+

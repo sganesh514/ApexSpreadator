@@ -55,7 +55,7 @@ class StrategyConfig:
         "1h": 7,      # 1-Hour chart -> 7 DTE
         "15m": 3,     # 15-Min chart -> 3 DTE
     })
-    default_timeframe: str = "1h"
+    default_timeframe: str = "15m"
 
     # Swing Point Extrema Window Size (N bars on each side)
     fractal_window: int = 3

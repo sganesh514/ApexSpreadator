@@ -444,7 +444,7 @@ class MoomooBroker(BrokerBase):
                 delta = float(row.get('option_delta', 0.0))
                 theta = float(row.get('option_theta', 0.0))
                 vega = float(row.get('option_vega', 0.0))
-                iv = float(row.get('option_implied_volatility', 0.0))
+                iv = float(row.get('option_implied_volatility', 0.0)) / 100.0
                 
                 exp_clean = exp_mapping.get(row_code, "")
                 dte = dte_mapping.get(row_code, 0)
@@ -509,7 +509,7 @@ class MoomooBroker(BrokerBase):
                         "gamma": float(row.get("option_gamma", 0.0)),
                         "theta": float(row.get("option_theta", 0.0)),
                         "vega": float(row.get("option_vega", 0.0)),
-                        "iv": float(row.get("option_implied_volatility", 0.0)),
+                        "iv": float(row.get("option_implied_volatility", 0.0)) / 100.0,
                     }
                 return {}
             return await asyncio.to_thread(_fetch)
@@ -545,15 +545,14 @@ class MoomooBroker(BrokerBase):
             leg2.action = TrdSide.SELL if action == "BUY" else TrdSide.BUY
             leg2.ratio = 1
             
-            combo_legs = [leg1, leg2]
+            combo_leg_list = [leg1, leg2]
             
             def _place():
                 ret, data = self._trade_ctx.place_combo_order(
-                    combo_legs=combo_legs,
+                    combo_leg_list=combo_leg_list,
                     price=float(limit_price),
                     qty=int(quantity),
                     order_type=OrderType.NORMAL,
-                    strategy_type=OptionStrategyType.NONE,
                     trd_env=self.trd_env
                 )
                 if ret == 0 and not data.empty:

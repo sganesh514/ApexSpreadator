@@ -4,6 +4,7 @@ Translates market structure retest signals into target Vertical Debit Spreads,
 selects strikes matching structural targets, and enforces the 2.5:1 Risk-to-Reward filter.
 """
 import math
+from datetime import datetime
 from typing import List, Dict, Optional, Tuple, Any
 from models import VerticalSpread, OptionLeg, Zone
 from utils import black_scholes_call, black_scholes_put, get_logger
@@ -56,7 +57,7 @@ class OptionsSelector:
         # ── 1. Strike Selection & Option Chain Validation ────────────
         if not options_chain:
             if is_backtesting:
-                logger.info(f"Backtest mode: Injecting synthetic data for {symbol}")
+                logger.info(f"Backtest mode: Generating synthetic spread for {symbol}")
                 return self._generate_synthetic_spread(
                     symbol=symbol,
                     direction=direction,
@@ -73,10 +74,38 @@ class OptionsSelector:
                 self._log_rejection(expiration, symbol, direction, underlying_price, 0.0, 0.0, 0.0, 0.0, status)
                 return None, status
 
-        # Live option chain strike filtering
+        # Live option chain expiration resolution with fallback:
+        # If the exact target expiration is not hosted by the broker, find the nearest
+        # available expiration that is >= the target. We never go shorter to protect
+        # positions from theta decay acceleration and early assignment risk.
+        available_expirations = sorted(set(
+            o["expiration"] for o in options_chain if o["right"] == right
+        ))
+        resolved_expiration = self._resolve_expiration(expiration, available_expirations)
+        if not resolved_expiration:
+            status = (
+                f"No expiration \u2265 target {expiration} available in chain "
+                f"(target DTE: {dte}). Available: {available_expirations or 'none'}"
+            )
+            self._log_rejection(expiration, symbol, direction, underlying_price, 0.0, 0.0, 0.0, 0.0, status)
+            return None, status
+
+        if resolved_expiration != expiration:
+            logger.info(
+                f"[{symbol}] Expiration fallback: {expiration} \u2192 {resolved_expiration} "
+                f"(broker does not host exact {dte}-DTE cycle)"
+            )
+            # Recompute effective DTE from the resolved expiration so Greeks stay accurate
+            try:
+                resolved_dt = datetime.strptime(resolved_expiration, "%Y%m%d").date()
+                dte = max(1, (resolved_dt - datetime.now().date()).days)
+            except ValueError:
+                pass  # Keep original dte if parse fails
+
+        expiration = resolved_expiration
         valid_options = [o for o in options_chain if o["expiration"] == expiration and o["right"] == right]
         if not valid_options:
-            status = f"No options found for {expiration}"
+            status = f"No options found for resolved expiration {expiration}"
             self._log_rejection(expiration, symbol, direction, underlying_price, 0.0, 0.0, 0.0, 0.0, status)
             return None, status
 
@@ -109,15 +138,27 @@ class OptionsSelector:
         long_opt = next((o for o in valid_options if o["strike"] == long_strike), None)
         short_opt = next((o for o in valid_options if o["strike"] == short_strike), None)
 
+        # Per-contract IV: use each contract's broker-reported IV rather than
+        # the flat VIX-derived parameter.  Falls back to the passed-in `iv`
+        # when the chain doesn't carry per-contract IV or when using BS pricing.
+        long_iv = iv
+        short_iv = iv
+
         if long_opt and short_opt:
             long_price = long_opt.get("mid") or (long_opt.get("bid", 0.0) + long_opt.get("ask", 0.0)) / 2.0
             short_price = short_opt.get("mid") or (short_opt.get("bid", 0.0) + short_opt.get("ask", 0.0)) / 2.0
             long_delta = long_opt.get("delta", 0.0)
             long_theta = long_opt.get("theta", 0.0)
             long_vega = long_opt.get("vega", 0.0)
+            long_iv = float(long_opt.get("iv", 0.0)) or iv
             short_delta = short_opt.get("delta", 0.0)
             short_theta = short_opt.get("theta", 0.0)
             short_vega = short_opt.get("vega", 0.0)
+            short_iv = float(short_opt.get("iv", 0.0)) or iv
+            logger.info(
+                f"[{symbol}] Per-contract IV: long={long_iv*100:.1f}%, "
+                f"short={short_iv*100:.1f}% (VIX fallback was {iv*100:.1f}%)"
+            )
         else:
             long_price, long_delta, long_theta, long_vega = self._price_option(underlying_price, long_strike, dte, iv, interest_rate, is_call)
             short_price, short_delta, short_theta, short_vega = self._price_option(underlying_price, short_strike, dte, iv, interest_rate, is_call)
@@ -147,7 +188,7 @@ class OptionsSelector:
             right=right,
             action="BUY",
             mid=long_price,
-            iv=iv,
+            iv=long_iv,
             delta=long_delta,
             theta=long_theta,
             vega=long_vega,
@@ -161,7 +202,7 @@ class OptionsSelector:
             right=right,
             action="SELL",
             mid=short_price,
-            iv=iv,
+            iv=short_iv,
             delta=short_delta,
             theta=short_theta,
             vega=short_vega,
@@ -290,6 +331,33 @@ class OptionsSelector:
             "rr_ratio": round(rr, 2),
             "status": status
         })
+
+    def _resolve_expiration(
+        self,
+        target_expiration: str,
+        available_expirations: List[str],
+    ) -> Optional[str]:
+        """
+        Given a target expiration string ("YYYYMMDD") and a sorted list of expiration
+        strings available in the broker's options chain, return the best expiration to use:
+
+        1. Exact match — return ``target_expiration`` if it is hosted by the broker.
+        2. Forward fallback — return the lexicographically smallest expiration that is
+           **>= target_expiration** (i.e., the nearest future cycle on or after the target).
+           We deliberately never go shorter than the target to protect positions from
+           accelerated theta decay and early assignment risk on near-expiry contracts.
+        3. If no qualifying expiration exists, return ``None``.
+        """
+        if not available_expirations:
+            return None
+
+        # Exact match
+        if target_expiration in available_expirations:
+            return target_expiration
+
+        # Nearest available expiration >= target (forward-only fallback)
+        candidates = [e for e in available_expirations if e >= target_expiration]
+        return candidates[0] if candidates else None
 
     def _price_option(self, S: float, K: float, dte: int, iv: float, r: float, is_call: bool) -> Tuple[float, float, float, float]:
         """Helper to price options via Black-Scholes model."""

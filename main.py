@@ -11,7 +11,7 @@ import threading
 from datetime import datetime, timedelta
 import pandas as pd
 import uvicorn
-from core.data_loader import get_live_price, get_live_prices, get_live_options_chain
+from core.data_loader import get_live_price, get_live_prices, get_live_options_chain, extract_atm_iv_from_chain
 
 from config import CONFIG, AgentConfig
 from models import (
@@ -135,62 +135,91 @@ class ApexSpreadatorAgent:
                 with open(zones_path, "r") as f:
                     active_zones = json.load(f)
                 
-                candidates = list(active_zones.keys())
-                if candidates:
-                    self.config.strategy.underlyings = candidates
-                    logger.info(f"Watchlist initialized from active_zones.json: {', '.join(candidates)}")
-                    
-                    # Initialize the UnderlyingTracker instances explicitly using coordinates loaded from JSON
-                    from models import Zone
-                    for symbol, data in active_zones.items():
-                        tracker = self.strategy.get_tracker(symbol)
-                        tracker.bias = data.get("trend_status", "NEUTRAL")
-                        
-                        # Load demand zones
-                        tracker.demand_zones = []
-                        for dz in data.get("demand_zones", []):
-                            tracker.demand_zones.append(
-                                Zone(
-                                    id=dz.get("id", ""),
-                                    type="DEMAND",
-                                    high=float(dz.get("high", 0.0)),
-                                    low=float(dz.get("low", 0.0)),
-                                    origin_candle_time=dz.get("origin_candle_time", ""),
-                                    is_active=dz.get("is_active", True)
-                                )
+                # ── Warm-start: hydrate trackers from pre-computed JSON ──────────────
+                # CONFIG.strategy.underlyings is intentionally NOT overwritten here.
+                # The JSON is a cache of pre-built market structure — it should supplement
+                # the canonical universe, not replace it.
+                from models import Zone
+                warm_started: list = []
+
+                for symbol, data in active_zones.items():
+                    tracker = self.strategy.get_tracker(symbol)
+                    tracker.bias = data.get("trend_status", "NEUTRAL")
+
+                    # Load demand zones
+                    tracker.demand_zones = []
+                    for dz in data.get("demand_zones", []):
+                        tracker.demand_zones.append(
+                            Zone(
+                                id=dz.get("id", ""),
+                                type="DEMAND",
+                                high=float(dz.get("high", 0.0)),
+                                low=float(dz.get("low", 0.0)),
+                                origin_candle_time=dz.get("origin_candle_time", ""),
+                                is_active=dz.get("is_active", True)
                             )
-                        
-                        # Load supply zones
-                        tracker.supply_zones = []
-                        for sz in data.get("supply_zones", []):
-                            tracker.supply_zones.append(
-                                Zone(
-                                    id=sz.get("id", ""),
-                                    type="SUPPLY",
-                                    high=float(sz.get("high", 0.0)),
-                                    low=float(sz.get("low", 0.0)),
-                                    origin_candle_time=sz.get("origin_candle_time", ""),
-                                    is_active=sz.get("is_active", True)
-                                )
+                        )
+
+                    # Load supply zones
+                    tracker.supply_zones = []
+                    for sz in data.get("supply_zones", []):
+                        tracker.supply_zones.append(
+                            Zone(
+                                id=sz.get("id", ""),
+                                type="SUPPLY",
+                                high=float(sz.get("high", 0.0)),
+                                low=float(sz.get("low", 0.0)),
+                                origin_candle_time=sz.get("origin_candle_time", ""),
+                                is_active=sz.get("is_active", True)
                             )
-                        
-                        # Load swing points
-                        if "swing_highs" in data:
-                            tracker.swing_highs = [(idx, val) for idx, val in data["swing_highs"]]
-                        if "swing_lows" in data:
-                            tracker.swing_lows = [(idx, val) for idx, val in data["swing_lows"]]
-                        
-                        # Load candles
-                        if "candles" in data:
-                            tracker.candles = data["candles"]
-                            
-                        logger.info(f"Initialized tracker for {symbol}: bias={tracker.bias}, demand_zones={len(tracker.demand_zones)}, supply_zones={len(tracker.supply_zones)}")
-                else:
-                    logger.warning("⚠️ Active zones file is empty. Initializing agent with empty state/scanning mode.")
-                    self.strategy.trackers = {}
+                        )
+
+                    # Load swing points
+                    if "swing_highs" in data:
+                        tracker.swing_highs = [(idx, val) for idx, val in data["swing_highs"]]
+                    if "swing_lows" in data:
+                        tracker.swing_lows = [(idx, val) for idx, val in data["swing_lows"]]
+
+                    # Load candles
+                    if "candles" in data:
+                        tracker.candles = data["candles"]
+
+                    warm_started.append(symbol)
+                    logger.debug(
+                        f"Warm-started tracker [{symbol}]: bias={tracker.bias}, "
+                        f"demand_zones={len(tracker.demand_zones)}, "
+                        f"supply_zones={len(tracker.supply_zones)}"
+                    )
+
+                logger.info(
+                    f"✅ Warm-started {len(warm_started)} tracker(s) from active_zones.json"
+                )
+
+                # ── Cold-start: ensure every configured ticker has a tracker ─────────
+                # Any symbol in the canonical universe that was NOT in active_zones.json
+                # gets a blank UnderlyingTracker so it can ingest live price bars and
+                # build market structure dynamically during the session.
+                cold_started: list = []
+                for symbol in self.config.strategy.underlyings:
+                    if symbol not in self.strategy.trackers:
+                        self.strategy.get_tracker(symbol)  # creates blank UnderlyingTracker
+                        cold_started.append(symbol)
+
+                if cold_started:
+                    preview = ", ".join(cold_started[:10])
+                    suffix = f" (+{len(cold_started) - 10} more)" if len(cold_started) > 10 else ""
+                    logger.info(
+                        f"🧊 Cold-started {len(cold_started)} blank tracker(s) for live data ingestion: "
+                        f"{preview}{suffix}"
+                    )
             except Exception as e:
                 logger.warning(f"⚠️ Failed to parse active zones file: {e}. Initializing agent with empty state/scanning mode.")
                 self.strategy.trackers = {}
+
+                # Still cold-start blank trackers for all configured underlyings
+                from models import Zone
+                for symbol in self.config.strategy.underlyings:
+                    self.strategy.get_tracker(symbol)
 
         # Refresh account data
         await self._refresh_account()
@@ -272,22 +301,22 @@ class ApexSpreadatorAgent:
             logger.info(f"Scanning prices in batch for {len(symbols_to_query)} symbols...")
             prices = await get_live_prices(symbols_to_query, self.broker)
 
-            # Resolve IV from VIX
+            # Resolve market-wide IV from VIX (used as fallback only)
             vix_val = prices.get("^VIX", 18.0)
             if vix_val <= 0:
                 vix_val = 18.0
-            iv_val = vix_val / 100.0
+            vix_iv = vix_val / 100.0
 
             today_str = datetime.now().strftime("%Y-%m-%d")
 
             for symbol in self.config.strategy.underlyings:
                 price = prices.get(symbol, 0.0)
                 if price <= 0:
-                    print(symbol)
+                    logger.debug(f"No price for {symbol}, skipping")
                     continue
 
-                # Feed the latest price to the tracker
-                opp = self.strategy.add_bar(
+                # Phase 1: Ingest bar and detect zone retest signal
+                signal = self.strategy.ingest_and_detect(
                     symbol=symbol,
                     open_p=price,
                     high_p=price,
@@ -295,11 +324,63 @@ class ApexSpreadatorAgent:
                     close_p=price,
                     volume=0.0,
                     timestamp=today_str,
-                    iv=iv_val
+                    iv=vix_iv
+                )
+
+                if not signal:
+                    continue
+
+                # Phase 2: Fetch real options chain from broker
+                direction = signal["direction"]
+                right = "C" if direction == "BULLISH" else "P"
+                timeframe = self.config.strategy.default_timeframe
+                dte = self.config.strategy.timeframe_dte_map.get(timeframe, 3)
+
+                logger.info(f"🔗 [{symbol}] Signal detected ({direction}), fetching live options chain...")
+
+                chain = None
+                try:
+                    chain = await get_live_options_chain(
+                        symbol=symbol,
+                        broker=self.broker,
+                        right=right,
+                        min_dte=max(0, dte - 5),
+                        max_dte=dte + 10
+                    )
+                except Exception as chain_err:
+                    logger.warning(f"[{symbol}] Failed to fetch options chain from broker: {chain_err}")
+
+                # Validate chain (handles both pd.DataFrame and list return types)
+                chain_empty = (chain is None)
+                if not chain_empty:
+                    if hasattr(chain, "empty"):
+                        chain_empty = chain.empty  # pandas DataFrame
+                    else:
+                        chain_empty = (len(chain) == 0)  # list
+
+                if chain_empty:
+                    logger.warning(f"[{symbol}] No options chain returned by broker — cannot price signal")
+                    continue
+
+                # Phase 3: Extract per-symbol ATM IV from the real chain
+                atm_iv = extract_atm_iv_from_chain(chain, price, right)
+                signal_iv = atm_iv if atm_iv else vix_iv
+                if atm_iv:
+                    logger.info(
+                        f"[{symbol}] Broker ATM IV: {atm_iv*100:.1f}% "
+                        f"(VIX proxy was {vix_iv*100:.1f}%)"
+                    )
+
+                # Phase 4: Price the signal with real broker chain + per-symbol IV
+                opp = self.strategy.price_signal(
+                    signal=signal,
+                    timestamp=today_str,
+                    iv=signal_iv,
+                    options_chain=chain,
+                    is_backtesting=False
                 )
 
                 if opp:
-                    # Trade signal generated! Let's check entry approval
                     await self._try_enter_trade(opp)
 
         except Exception as e:
@@ -308,7 +389,11 @@ class ApexSpreadatorAgent:
             self._scanner_status.is_scanning = False
 
     async def _try_enter_trade(self, opportunity):
-        """Attempt to enter a trade on a zone retest opportunity."""
+        """Attempt to enter a trade on a zone retest opportunity.
+        
+        The opportunity's spread is already priced using real broker chain data
+        and per-symbol ATM IV from the _run_scan() pipeline.
+        """
         should_enter, reason = self.strategy.should_enter(
             opportunity=opportunity,
             account=self._account,
@@ -327,40 +412,6 @@ class ApexSpreadatorAgent:
 
         # Get pre-trade analysis from Ollama
         analysis = await self.analyst.analyze_pre_trade(opportunity)
-
-        # Query options chain from broker to get real contracts if live option chain filtering is used
-        options_chain = None
-        try:
-            dte = opportunity.spread.long_leg.dte
-            options_chain = await get_live_options_chain(
-                symbol=opportunity.symbol,
-                broker=self.broker,
-                right=opportunity.spread.right,
-                min_dte=max(0, dte - 5),
-                max_dte=dte + 5
-            )
-        except Exception as chain_err:
-            logger.warning(f"Failed to fetch option chain from broker: {chain_err}")
-
-        # Re-price using actual broker values if available
-        if options_chain:
-            # Let the selector select using actual option chain
-            spread, status = self.strategy.selector.select_spread(
-                symbol=opportunity.symbol,
-                direction=opportunity.direction,
-                underlying_price=opportunity.underlying_price,
-                target_tp=opportunity.spread.short_leg.strike,
-                target_sl=opportunity.invalidation_price,
-                expiration=opportunity.spread.expiration,
-                dte=dte,
-                iv=opportunity.spread.long_leg.iv,
-                options_chain=options_chain
-            )
-            if spread:
-                opportunity.spread = spread
-            else:
-                logger.info(f"OptionsSelector rejected spread based on real broker pricing: {status}")
-                return
 
         # Execute the trade
         order_id, fill_price = await self.execution.open_spread(opportunity, quantity)
